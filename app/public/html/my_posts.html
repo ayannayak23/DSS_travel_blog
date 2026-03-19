@@ -8,31 +8,26 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
         <script src="../js/my_posts.js" defer></script>
         <script src="../js/main.js" defer></script>
+                <script src="../js/header.js"></script>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                renderHeader('login');
+            });
+        </script>
     </head>
     <body>
-        <header>
-            <a href="../html/index.html"><img id="logo" src="../imgs/logo.png"></a>
-            <h1>Foodies 'R' Us</h1>
-            <div class="dropdown">
-                <button id="login_link" href="#">Username <i class="fa fa-caret-down"></i></button>
-                <div class="dropdown-content">
-                    <a id="logout_btn" href="../html/login.html">Log out</a>
-                </div>
-            </div>
-        </header>
-
-        <nav>
-            <ul>
-                <li><a href="../html/index.html">Home</a></li>
-                <li><a href="../html/posts.html">Latest Posts</a></li>
-                <li class="active"><a href="../html/my_posts.html">My Posts</a></li>
-            </ul>
-        </nav>
+        <div id="header"></div>
+        <script src="../js/header.js"></script>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                renderHeader('my_posts');
+            });
+        </script>
 
         <main>
             <section>
                 <h2>Share your thoughts</h2>
-                <p>Get chatting with your fellow Foodies!</p>
+                <p>Get chatting with other travellers!</p>
 
                 <form action="/makepost" method="post" id="postForm" name="postForm">
                     <fieldset>

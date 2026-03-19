@@ -7,36 +7,40 @@ body {
     color: black;
     font-family: sans-serif, Arial;
     line-height: 1.5;  
-    font-size: 16px;     
+    font-size: 16px;
+    margin: 0; 
     }
 
     header{
-        background-color:rgb(255, 73, 0);
-        text-align: center;
-        height: 150px;
-        color: #000000;
+        background-color:rgb(87, 157, 189);
+        padding: 10px 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 100px;
+        width: 100%;
+        box-sizing: border-box;
     }
 
-    header > h1{
-        font-size: 28pt;
-        display: inline-block;
-        line-height: 200%;
-        padding: 25px;
+    .site-header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
     }
 
-    #logo {
-        width: 150px;
-        height: 150px;
+    .logo {
+        width: 75px;
+        height: 75px;
         float: left;
     }
 
     #login_link {
         color: black;
-        background-color: #eda079;
+        background-color: rgb(87, 157, 189);
         padding: 7px;
         min-width: 100px;
         border-radius: 3px;
-        border: 2px solid #9e3603;
+        border: 2px solid rgb(87, 157, 189);
         text-transform: uppercase;
         font-weight: bold;
         float: left;
@@ -47,11 +51,11 @@ body {
 
     .link_btn {
         color: black;
-        background-color: #f56d36;
+        background-color: #5d97da;
         padding: 7px;
         min-width: 100px;
         border-radius: 3px;
-        border: 2px solid #c74402;
+        border: 2px solid black;
         text-transform: uppercase;
         font-weight: bold;
         text-align: center;
@@ -61,12 +65,44 @@ body {
         text-decoration: none;
     }
 
-    .link_btn:hover {
-        background-color: #f2875c;
-    }
-
     .error {
         color: red;
+    }
+
+    .site-title {
+        font-size: 2.3em;
+        font-weight: bold;
+        color: #222;
+    }
+
+    .site-nav-list {
+        list-style: none;
+        display: flex;
+        gap: 0px;
+        margin: 0;
+        padding: 0;
+    }
+
+    .site-nav-link {
+        color: #333;
+        text-decoration: none;
+        font-size: 1em;
+        transition: color 0.2s;
+        padding: 10px;
+        margin: 7px;
+        border-radius: 8px;
+        font-size: larger;
+    }
+
+    .site-nav-link:hover {
+        color: #fff;
+        background-color: #206ec9;
+    }
+
+    .site-nav-link.active {
+        font-weight: bold;
+        color: #fff;
+        background-color: #12407c;
     }
 
     #login_form {
@@ -76,7 +112,7 @@ body {
     #login_btn {
         width: 100px;
         color: black;
-        background-color: #eda079;
+        background-color: #5d97da;
         font-size: 18px;
         font-weight: bold;
         border: black solid 1px;
@@ -86,7 +122,7 @@ body {
     }
 
     #login_btn:hover {
-        background-color: #f2875c;
+        background-color: #1758a1;
     }
 
     label {
@@ -100,47 +136,10 @@ body {
         font-size: 14px;
     }
 
-    nav ul{
-        list-style-type: none;
-    }
-    
-    nav ul li a{
-        text-decoration: none;
-        padding: 5px;
-    }
-    
-    a:link {
-        color: black;
-    }
-
-    a:visited{
-        color: black;
-    }
-    
-    nav ul li a:hover{
-        color: #fff;
-        background-color: #d2a868;
-        
-    }
-    
-    nav{
-        text-align: center;
-        padding: 8px;
-    }
-    
-    nav ul li {
-        display: inline;
-        padding: 25px;
-    }
-    
-    .active a{
-        border-bottom: 3px solid #32312f;
-        }
-
     main{
         margin: 10px 20%;
         padding: 16px;
-        border: 2px solid #e6b4a1;
+        border: 2px solid rgb(87, 157, 189);
         border-radius: 20px;
         font-size: 18px;
     }
@@ -148,7 +147,7 @@ body {
     section{
         padding: 20px 0px;
         margin: 10px auto;
-        background-color: #f7a98b;
+        background-color: rgb(182, 222, 238);
         overflow: hidden;
         border-radius: 10px;
         margin: 5px;
@@ -183,7 +182,7 @@ body {
       }
       
       .user_menu a:hover, .dropdown:hover #login_link {
-        background-color: #f2875c;
+        background-color: rgb(87, 157, 189);
       }
 
       .dropdown-content {
@@ -223,7 +222,7 @@ body {
 
       .post {
         background-color: white;
-        border: 2px solid #c74402;
+        border: 2px solid rgb(87, 157, 189);
         border-radius: 10px;
         margin: 10px;
         text-align: left;
@@ -236,7 +235,7 @@ body {
         font-size: 14px;
         /* marg in: 20px; */
         border-radius: 3px;
-        border: 2px solid #c74402;
+        border: 2px solid #12407c;
         font-size: 20px;
       }
 
@@ -286,7 +285,7 @@ main button {
     margin: 5px;
     width: 100px;
     color: black;
-    background-color: #f56d36;
+    background-color: #5d97da;
     font-size: 18px;
     font-weight: bold;
     border: black solid 1px;
@@ -297,7 +296,7 @@ main button {
 }
 
 main button:hover {
-    background-color: #f2875c;
+    background-color: #1758a1;
 }
 
 #postForm {
@@ -319,7 +318,7 @@ fieldset{
     flex-wrap: wrap;
     margin: auto 2%;
     width: 100%;
-    border: solid 3px #c74402;
+    border: solid 3px #12407c;
     border-radius: 5px;
 }
 
@@ -334,7 +333,7 @@ legend{
     width: 95%;
     padding: 10px;
     margin:0 5px;
-    border: 2px solid #c74402;
+    border: 2px solid #12407c;
 }
 
 #postForm input:hover, #postForm textarea:hover{
@@ -350,10 +349,10 @@ legend{
 #postForm button[type=submit]{
     margin: 2% 40%;
     min-width: 150px;
-    border: 2px solid #c74402;
+    border: 2px solid black;
     border-radius: 10px;
     cursor: pointer;
-    background-color: #f56d36;
+    background-color: #5d97da;
     color: black;
     padding: 6px 10px;
     font-weight: bold;
@@ -363,5 +362,5 @@ legend{
 }
 
 #postForm button[type=submit]:hover {
-    background-color: #f2875c;
+    background-color: #1758a1;
 }
