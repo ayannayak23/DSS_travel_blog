@@ -4,11 +4,30 @@ const port = 3000;
 
 var bodyParser = require('body-parser');
 const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
+const { Pool } = require('pg');
+
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 app.use(express.static(__dirname + '/public'));
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+
+const dbConnectionString = process.env.DATABASE_URL || process.env.DATABASE_URL;
+
+if (!dbConnectionString) {
+    console.error('Missing DATABASE_URL (or DATABASE_URL) in app/.env.');
+    process.exit(1);
+}
+
+const pool = new Pool({
+    connectionString: dbConnectionString,
+    ssl: {
+        rejectUnauthorized: false
+    }
+});
 
 // Landing page
 app.get('/', (req, res) => {
@@ -20,69 +39,71 @@ app.get('/', (req, res) => {
     })
 });
 
-// Reset login_attempt.json when server restarts
-let login_attempt = {"username" : "null", "password" : "null"};
-let data = JSON.stringify(login_attempt);
-fs.writeFileSync(__dirname + '/public/json/login_attempt.json', data);
-
 // Store who is currently logged in
 let currentUser = null;
+let loginStatus = 'none';
+
+function sendLoginPage(res) {
+    res.sendFile(__dirname + '/public/html/login.html', (err) => {
+        if (err){
+            console.log(err);
+        }
+    });
+}
+
+app.get('/login-status', (req, res) => {
+    res.json({ status: loginStatus });
+});
+
+app.get('/current-user', (req, res) => {
+    res.json({ username: currentUser });
+});
 
 // Login POST request
-app.post('/',function(req, res){
+app.post('/', async function(req, res){
 
     // Get username and password entered from user
-    var username = req.body.username_input;
-    var password = req.body.password_input;
+    var username = (req.body.username_input || '').trim();
+    var password = req.body.password_input || '';
 
-    // Currently only "username" is a valid username
-    if(username !== "username") {
+    if (username === '' || password === '') {
+        currentUser = null;
+        loginStatus = 'empty';
+        return sendLoginPage(res);
+    }
 
-        // Update login_attempt with credentials used to log in
-        let login_attempt = {"username" : username, "password" : password};
-        let data = JSON.stringify(login_attempt);
-        fs.writeFileSync(__dirname + '/public/json/login_attempt.json', data);
+    try {
+        // Intentionally plaintext comparison for coursework behavior.
+        const userResult = await pool.query(
+            'SELECT username, password FROM users WHERE username = $1 LIMIT 1',
+            [username]
+        );
 
-        // Redirect back to login page
-        res.sendFile(__dirname + '/public/html/login.html', (err) => {
+        if (userResult.rows.length === 0) {
+            currentUser = null;
+            loginStatus = 'bad_username';
+            return sendLoginPage(res);
+        }
+
+        if (userResult.rows[0].password !== password) {
+            currentUser = null;
+            loginStatus = 'bad_password';
+            return sendLoginPage(res);
+        }
+
+        loginStatus = 'success';
+        currentUser = username;
+
+        return res.sendFile(__dirname + '/public/html/index.html', (err) => {
             if (err){
                 console.log(err);
             }
         });
-    }
-
-    // Currently only "password" is a valid password
-    if(password !== "password") {
-
-        // Update login_attempt with credentials used to log in
-        let login_attempt = {"username" : username, "password" : password};
-        let data = JSON.stringify(login_attempt);
-        fs.writeFileSync(__dirname + '/public/json/login_attempt.json', data);
-
-        // Redirect back to login page
-        res.sendFile(__dirname + '/public/html/login.html', (err) => {
-            if (err){
-                console.log(err);
-            }
-        });
-    }
-
-    // Valid username and password both entered together
-    if(username === "username" && password === "password") {
-        // Update login_attempt with credentials
-        let login_attempt = {"username" : username, "password" : password};
-        let data = JSON.stringify(login_attempt);
-        fs.writeFileSync(__dirname + '/public/json/login_attempt.json', data);
-
-        // Update current user upon successful login
-        currentUser = req.body.username_input;
-
-        // Redirect to home page
-        res.sendFile(__dirname + '/public/html/index.html', (err) => {
-            if (err){
-                console.log(err);
-            }
-        })
+    } catch (error) {
+        console.error('Login query failed:', error.message);
+        currentUser = null;
+        loginStatus = 'server_error';
+        return sendLoginPage(res);
     }
 });
 
@@ -145,6 +166,13 @@ app.post('/makepost', function(req, res) {
     res.sendFile(__dirname + "/public/html/my_posts.html");
  });
 
-app.listen(port, () => {
-    console.log(`My app listening on port ${port}!`)
-});
+pool.query('SELECT 1')
+    .then(() => {
+        app.listen(port, () => {
+            console.log(`My app listening on port ${port}!`)
+        });
+    })
+    .catch((error) => {
+        console.error('Failed to connect to PostgreSQL:', error.message);
+        process.exit(1);
+    });

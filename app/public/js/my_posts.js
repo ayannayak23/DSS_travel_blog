@@ -5,9 +5,9 @@ async function loadPosts() {
     const post_response = await fetch("../json/posts.json");
     const post_data = await post_response.json();
 
-    // Load login data
-    const login_response = await fetch("../json/login_attempt.json");
-    const login_data = await login_response.json();
+    // Load currently logged-in user
+    const user_response = await fetch('/current-user', { cache: 'no-store' });
+    const user_data = await user_response.json();
 
     // Remove current posts
     let postList = document.getElementById('myPosts');
@@ -24,7 +24,7 @@ async function loadPosts() {
         let author = post_data[i].username;
 
         // Check usernames match on each post
-        if(author === login_data.username) {
+        if(author === user_data.username) {
             let timestamp = post_data[i].timestamp;
             let title = post_data[i].title;
             let content = post_data[i].content;
@@ -41,9 +41,7 @@ async function loadPosts() {
             postId.id = "postId";
             postContainer.appendChild(postIdContainer);
 
-            let img = document.createElement('img');
             let figcap = document.createElement('figcaption');
-            fig.appendChild(img);
             fig.appendChild(figcap);
             
             let titleContainer = document.createElement('h3');

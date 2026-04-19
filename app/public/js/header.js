@@ -17,7 +17,7 @@ function renderHeader(activePage) {
             <header>
                 <div class="site-header-left">
                     <a href="../html/index.html"><img src="../imgs/logo.png" alt="Logo" class="logo"></a>
-                    <span class="site-title">Traveller 21</span>
+                    <a href="../html/index.html"><span class="site-title">Traveller 21</span></a>
                 </div>
                 ${navHtml}
             </header>

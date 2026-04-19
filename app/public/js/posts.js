@@ -5,9 +5,6 @@ async function loadPosts() {
     const post_response = await fetch("../json/posts.json");
     const post_data = await post_response.json();
 
-    const login_response = await fetch("../json/login_attempt.json");
-    const login_data = await login_response.json();
-
     let postList = document.getElementById('postsList');
 
     // Remove current posts
@@ -36,9 +33,7 @@ async function loadPosts() {
         postId.id = "postId";
         postContainer.appendChild(postIdContainer);
 
-        let img = document.createElement('img');
         let figcap = document.createElement('figcaption');
-        fig.appendChild(img);
         fig.appendChild(figcap);
         
         let titleContainer = document.createElement('h3');
