@@ -41,7 +41,7 @@ app.get('/', (req, res) => {
 
 // Store who is currently logged in
 let currentUser = null;
-let loginStatus = 'none';
+let loginStatus = 'first_load';
 
 function sendLoginPage(res) {
     res.sendFile(__dirname + '/public/html/login.html', (err) => {
@@ -62,16 +62,18 @@ app.get('/current-user', (req, res) => {
 // Login POST request
 app.post('/', async function(req, res){
 
-    // Get username and password entered from user
+    // Step 1: Extracts username and password from the form
     var username = (req.body.username_input || '').trim();
     var password = req.body.password_input || '';
 
+    // Step 2: Check for empty fields
     if (username === '' || password === '') {
         currentUser = null;
         loginStatus = 'empty';
         return sendLoginPage(res);
     }
 
+    // Step 3: Query the database for the user and validate credentials
     try {
         // Intentionally plaintext comparison for coursework behavior.
         const userResult = await pool.query(
@@ -79,15 +81,16 @@ app.post('/', async function(req, res){
             [username]
         );
 
+        // Step 4: Check if user exists and if password matches
         if (userResult.rows.length === 0) {
             currentUser = null;
-            loginStatus = 'bad_username';
+            loginStatus = 'invalid';
             return sendLoginPage(res);
         }
 
         if (userResult.rows[0].password !== password) {
             currentUser = null;
-            loginStatus = 'bad_password';
+            loginStatus = 'invalid';
             return sendLoginPage(res);
         }
 
