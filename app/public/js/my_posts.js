@@ -83,9 +83,12 @@ loadPosts();
 // Function to remove a post from the page after clicking delete - this is also reflected on the server side
 function deletePost(e) {
 
+    // Get the post that was clicked
+    let post = e.target.parentNode;
+
     // Put post in object to be the body of fetch request
-    const post = {
-        postId:document.getElementsByTagName('h6')[0].textContent, 
+    const postData = {
+        postId: post.getElementsByTagName('h6')[0].textContent, 
     };
 
     const requestHeaders = {
@@ -96,7 +99,7 @@ function deletePost(e) {
   fetch('/deletepost', {
     method: 'POST',
     headers: requestHeaders,
-    body:JSON.stringify(post)
+    body:JSON.stringify(postData)
   });
 
   // Hide element on button click so deletion appears immediate

@@ -7,6 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
 const { Pool } = require('pg');
+const crypto = require('crypto');
+const cookieParser = require('cookie-parser');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
@@ -14,6 +16,7 @@ app.use(express.static(__dirname + '/public'));
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+app.use(cookieParser());
 
 const dbConnectionString = process.env.DATABASE_URL || process.env.DATABASE_URL;
 
@@ -59,6 +62,11 @@ app.get('/current-user', (req, res) => {
     res.json({ username: currentUser });
 });
 
+// Ping endpoint - updates last_activity to keep session alive on any user interaction
+app.get('/ping', validateSession, (req, res) => {
+    res.json({ status: 'ok', username: req.currentUser });
+});
+
 // Login POST request
 app.post('/', async function(req, res){
 
@@ -94,6 +102,42 @@ app.post('/', async function(req, res){
             return sendLoginPage(res);
         }
 
+        // Step 5: Invalidate all old sessions for this user
+        try {
+            await pool.query(
+                `UPDATE sessions SET is_active = false WHERE username = $1`,
+                [username]
+            );
+        } catch (cleanupError) {
+            console.error('Failed to cleanup old sessions:', cleanupError.message);
+            // Continue anyway, don't block login
+        }
+
+        // Step 6: Generate a new session ID
+        const sessionId = crypto.randomBytes(32).toString('hex');
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const userAgent = req.get('user-agent') || '';
+
+        // Step 7: Create session in database
+        try {
+            await pool.query(
+                `INSERT INTO sessions (session_id, username, ip_address, user_agent, is_active) 
+                 VALUES ($1, $2, $3, $4, true)`,
+                [sessionId, username, ipAddress, userAgent]
+            );
+        } catch (sessionError) {
+            console.error('Failed to create session:', sessionError.message);
+            loginStatus = 'server_error';
+            return sendLoginPage(res);
+        }
+
+        // Step 8: Set session cookie
+        res.cookie('session_id', sessionId, {
+            httpOnly: true,
+            secure: false, // Set to true in production with HTTPS
+            maxAge: 30 * 60 * 1000 // 30 minutes
+        });
+
         loginStatus = 'success';
         currentUser = username;
 
@@ -110,8 +154,97 @@ app.post('/', async function(req, res){
     }
 });
 
+// Session Validation Middleware - Prevents Session Hijacking
+async function validateSession(req, res, next) {
+    const sessionId = req.cookies.session_id;
+    const currentIp = req.ip || req.connection.remoteAddress;
+    const currentUserAgent = req.get('user-agent') || '';
+
+    // Step 1: Check if session cookie exists
+    if (!sessionId) {
+        console.warn('No session cookie found');
+        return res.redirect('/');
+    }
+
+    try {
+        // Step 2: Query database for this session
+        const sessionResult = await pool.query(
+            `SELECT * FROM sessions WHERE session_id = $1 AND is_active = true`,
+            [sessionId]
+        );
+
+        // Step 3: Check if session exists and is active
+        if (sessionResult.rows.length === 0) {
+            console.warn('Session not found or inactive:', sessionId);
+            res.clearCookie('session_id');
+            return res.redirect('/');
+        }
+
+        const session = sessionResult.rows[0];
+
+        // Step 4: Check if session has timed out (90 minutes to account for timezone differences = 30 minutes real inactivity)
+        const lastActivity = new Date(session.last_activity);
+        const now = new Date();
+        const minutesElapsed = (now - lastActivity) / (1000 * 60);
+
+        if (minutesElapsed > 90) { // 90 minutes (30 real minutes + 60 min timezone offset)
+            console.warn('Session timeout for user:', session.username);
+            await pool.query(
+                `UPDATE sessions SET is_active = false WHERE session_id = $1`,
+                [sessionId]
+            );
+            res.clearCookie('session_id');
+            return res.redirect('/');
+        }
+
+        // Step 5: Check if IP address matches (hijacking detection)
+        if (session.ip_address !== currentIp) {
+            console.warn('IP mismatch detected for session:', sessionId);
+            console.warn('Original IP:', session.ip_address, 'Current IP:', currentIp);
+            
+            // Invalidate session due to suspicious activity
+            await pool.query(
+                `UPDATE sessions SET is_active = false WHERE session_id = $1`,
+                [sessionId]
+            );
+            res.clearCookie('session_id');
+            return res.redirect('/');
+        }
+
+        // Step 6: Check if user-agent matches (device/browser change detection)
+        if (session.user_agent !== currentUserAgent) {
+            console.warn('User-agent mismatch detected for session:', sessionId);
+            console.warn('Original user-agent:', session.user_agent);
+            console.warn('Current user-agent:', currentUserAgent);
+            
+            // Invalidate session due to suspicious activity
+            await pool.query(
+                `UPDATE sessions SET is_active = false WHERE session_id = $1`,
+                [sessionId]
+            );
+            res.clearCookie('session_id');
+            return res.redirect('/');
+        }
+
+        // Step 7: Update last_activity timestamp
+        await pool.query(
+            `UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE session_id = $1`,
+            [sessionId]
+        );
+
+        // Step 8: Attach session info to request for use in route handlers
+        req.session = session;
+        req.currentUser = session.username;
+
+        next();
+    } catch (error) {
+        console.error('Session validation error:', error.message);
+        return res.redirect('/');
+    }
+}
+
 // Make a post POST request
-app.post('/makepost', function(req, res) {
+app.post('/makepost', validateSession, function(req, res) {
 
     // Read in current posts
     const json = fs.readFileSync(__dirname + '/public/json/posts.json');
@@ -144,7 +277,7 @@ app.post('/makepost', function(req, res) {
     }
 
     // Add post to posts.json
-    posts.push({"username": currentUser , "timestamp": curDate, "postId": newId, "title": req.body.title_field, "content": req.body.content_field});
+    posts.push({"username": req.currentUser , "timestamp": curDate, "postId": newId, "title": req.body.title_field, "content": req.body.content_field});
 
     fs.writeFileSync(__dirname + '/public/json/posts.json', JSON.stringify(posts));
 
@@ -153,7 +286,7 @@ app.post('/makepost', function(req, res) {
  });
 
  // Delete a post POST request
- app.post('/deletepost', (req, res) => {
+ app.post('/deletepost', validateSession, (req, res) => {
 
     // Read in current posts
     const json = fs.readFileSync(__dirname + '/public/json/posts.json');
