@@ -1,3 +1,48 @@
+let recaptchaSiteKey = null;
+let isRecaptchaApiLoaded = false;
+let isRecaptchaRendered = false;
+
+// Callback used by the reCAPTCHA API script in login.html
+window.onRecaptchaLoaded = function() {
+    isRecaptchaApiLoaded = true;
+    renderRecaptchaIfReady();
+};
+
+function renderRecaptchaIfReady() {
+    // Render only once script and site key are ready
+    if (!isRecaptchaApiLoaded || !recaptchaSiteKey || isRecaptchaRendered) {
+        return;
+    }
+
+    // Safety guard in case API object is not attached yet
+    if (typeof grecaptcha === 'undefined') {
+        return;
+    }
+
+    grecaptcha.render('recaptcha_container', {
+        sitekey: recaptchaSiteKey
+    });
+    isRecaptchaRendered = true;
+}
+
+async function setupRecaptcha() {
+    try {
+        // Fetch the public reCAPTCHA site key from backend
+        const response = await fetch('/captcha-config', { cache: 'no-store' });
+        const configData = await response.json();
+        recaptchaSiteKey = configData.siteKey || null;
+
+        // Handle case where API script loaded before this fetch completed
+        if (typeof grecaptcha !== 'undefined' && typeof grecaptcha.render === 'function') {
+            isRecaptchaApiLoaded = true;
+        }
+
+        renderRecaptchaIfReady();
+    } catch (error) {
+        console.error('Failed to load reCAPTCHA config:', error);
+    }
+}
+
 // Update error message based on login attempt
 async function checkLoginAttempts() {
 
@@ -22,6 +67,14 @@ async function checkLoginAttempts() {
     else if (statusData.status === 'empty') {
         message = 'Please fill out the login fields.';
     } 
+    // Check: Missing reCAPTCHA response
+    else if (statusData.status === 'captcha_required') {
+        message = 'Please complete the reCAPTCHA check.';
+    }
+    // Check: Invalid reCAPTCHA response
+    else if (statusData.status === 'captcha_failed') {
+        message = 'reCAPTCHA verification failed. Please try again.';
+    }
     // Check: Invalid username or password (prevents account enumeration)
     else if (statusData.status === 'invalid') {
         message = 'Invalid username or password.';
@@ -47,4 +100,5 @@ async function checkLoginAttempts() {
     }
 }
 
+setupRecaptcha();
 checkLoginAttempts();

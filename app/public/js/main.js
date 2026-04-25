@@ -8,24 +8,38 @@ async function displayUsername() {
 
 displayUsername();
 
-// Session Activity Tracking - Keep session alive on any user interaction
+// Session Activity Tracking - update activity only when the user interacts with the page
+const activityPingIntervalMs = 20 * 1000;
+let lastActivityPingTime = 0;
+
 async function pingServer() {
+    const now = Date.now();
+    if (now - lastActivityPingTime < activityPingIntervalMs) {
+        return;
+    }
+    lastActivityPingTime = now;
+
     try {
-        const response = await fetch('/ping', { cache: 'no-store' });
-        if (response.status === 401 || response.status === 302) {
+        const response = await fetch('/ping', {
+            cache: 'no-store',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        if (response.status === 401) {
             // Session expired or invalid
             console.warn('Session expired, redirecting to login...');
             window.location.href = '/';
         }
     } catch (error) {
-        // Network error, don't redirect - user might be temporarily offline
+        // Network error, no redirect - user might be temporarily offline
         console.error('Ping error:', error);
     }
 }
 
-// Ping server every 2 minutes to keep session alive
-setInterval(pingServer, 2 * 60 * 1000);
-
-// Also ping on user interactions
+// Count user interaction as activity
 document.addEventListener('click', pingServer);
 document.addEventListener('keydown', pingServer);
+document.addEventListener('scroll', pingServer, { passive: true });
+document.addEventListener('touchstart', pingServer, { passive: true });

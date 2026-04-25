@@ -6,6 +6,7 @@
         <link rel="icon" type="image/png" href="../imgs/plane-icon.png">
         <link rel="stylesheet" href="../css/style.css">
         <script src="../js/login.js" defer></script>
+        <script src="https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoaded&render=explicit" defer></script>
         <script src="../js/header.js"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
@@ -24,6 +25,8 @@
 
             <label for="password_input">Password:</label>
             <input type="password" id="password_input" name="password_input" placeholder="Please enter your password...">
+
+            <div id="recaptcha_container"></div>
 
             <button id="login_btn" type="submit">Log in</button>
         </form>

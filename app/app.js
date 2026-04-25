@@ -18,10 +18,18 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-const dbConnectionString = process.env.DATABASE_URL || process.env.DATABASE_URL;
+const dbConnectionString = process.env.DATABASE_URL;
+const recaptchaSiteKey = process.env.RECAPTCHA_SITE_KEY;
+const recaptchaSecretKey = process.env.RECAPTCHA_SECRET_KEY;
+const sessionTimeoutMinutes = 4;
 
 if (!dbConnectionString) {
-    console.error('Missing DATABASE_URL (or DATABASE_URL) in app/.env.');
+    console.error('Missing DATABASE_URL in app/.env.');
+    process.exit(1);
+}
+
+if (!recaptchaSiteKey || !recaptchaSecretKey) {
+    console.error('Missing RECAPTCHA_SITE_KEY or RECAPTCHA_SECRET_KEY in app/.env.');
     process.exit(1);
 }
 
@@ -54,12 +62,50 @@ function sendLoginPage(res) {
     });
 }
 
+// Verify the token from the browser with Google's siteverify API
+async function verifyRecaptchaToken(token, remoteIp) {
+    try {
+        const body = new URLSearchParams();
+        body.append('secret', recaptchaSecretKey);
+        body.append('response', token);
+
+        if (remoteIp) {
+            body.append('remoteip', remoteIp);
+        }
+
+        const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body
+        });
+
+        // If Google did not respond successfully, treat it as verification failure
+        if (!response.ok) {
+            return false;
+        }
+
+        const verificationResult = await response.json();
+        // Allow login only when Google marks the token as valid
+        return verificationResult.success === true;
+    } catch (error) {
+        console.error('reCAPTCHA verification failed:', error.message);
+        return false;
+    }
+}
+
 app.get('/login-status', (req, res) => {
     res.json({ status: loginStatus });
 });
 
 app.get('/current-user', (req, res) => {
     res.json({ username: currentUser });
+});
+
+// Expose only the public site key to the browser. Secret key stays server-side
+app.get('/captcha-config', (req, res) => {
+    res.json({ siteKey: recaptchaSiteKey });
 });
 
 // Ping endpoint - updates last_activity to keep session alive on any user interaction
@@ -81,7 +127,26 @@ app.post('/', async function(req, res){
         return sendLoginPage(res);
     }
 
-    // Step 3: Query the database for the user and validate credentials
+    // Step 3: Validate reCAPTCHA token before checking credentials
+    const recaptchaToken = req.body['g-recaptcha-response'] || '';
+    if (recaptchaToken === '') {
+        currentUser = null;
+        loginStatus = 'captcha_required';
+        return sendLoginPage(res);
+    }
+
+    const recaptchaVerified = await verifyRecaptchaToken(
+        recaptchaToken,
+        req.ip || req.connection.remoteAddress
+    );
+
+    if (!recaptchaVerified) {
+        currentUser = null;
+        loginStatus = 'captcha_failed';
+        return sendLoginPage(res);
+    }
+
+    // Step 4: Query the database for the user and validate credentials
     try {
         // Intentionally plaintext comparison for coursework behavior.
         const userResult = await pool.query(
@@ -89,7 +154,7 @@ app.post('/', async function(req, res){
             [username]
         );
 
-        // Step 4: Check if user exists and if password matches
+        // Step 5: Check if user exists and if password matches
         if (userResult.rows.length === 0) {
             currentUser = null;
             loginStatus = 'invalid';
@@ -102,7 +167,7 @@ app.post('/', async function(req, res){
             return sendLoginPage(res);
         }
 
-        // Step 5: Invalidate all old sessions for this user
+        // Step 6: Invalidate all old sessions for this user
         try {
             await pool.query(
                 `UPDATE sessions SET is_active = false WHERE username = $1`,
@@ -113,12 +178,12 @@ app.post('/', async function(req, res){
             // Continue anyway, don't block login
         }
 
-        // Step 6: Generate a new session ID
+        // Step 7: Generate a new session ID
         const sessionId = crypto.randomBytes(32).toString('hex');
         const ipAddress = req.ip || req.connection.remoteAddress;
         const userAgent = req.get('user-agent') || '';
 
-        // Step 7: Create session in database
+        // Step 8: Create session in database
         try {
             await pool.query(
                 `INSERT INTO sessions (session_id, username, ip_address, user_agent, is_active) 
@@ -131,7 +196,7 @@ app.post('/', async function(req, res){
             return sendLoginPage(res);
         }
 
-        // Step 8: Set session cookie
+        // Step 9: Set session cookie
         res.cookie('session_id', sessionId, {
             httpOnly: true,
             secure: false, // Set to true in production with HTTPS
@@ -156,6 +221,17 @@ app.post('/', async function(req, res){
 
 // Session Validation Middleware - Prevents Session Hijacking
 async function validateSession(req, res, next) {
+    const handleSessionFailure = async () => {
+        res.clearCookie('session_id');
+
+        // /ping is called via fetch, so return JSON + 401 for reliable client-side handling
+        if (req.path === '/ping') {
+            return res.status(401).json({ status: 'session_invalid' });
+        }
+
+        return res.redirect('/');
+    };
+
     const sessionId = req.cookies.session_id;
     const currentIp = req.ip || req.connection.remoteAddress;
     const currentUserAgent = req.get('user-agent') || '';
@@ -163,38 +239,36 @@ async function validateSession(req, res, next) {
     // Step 1: Check if session cookie exists
     if (!sessionId) {
         console.warn('No session cookie found');
-        return res.redirect('/');
+        return handleSessionFailure();
     }
 
     try {
         // Step 2: Query database for this session
         const sessionResult = await pool.query(
-            `SELECT * FROM sessions WHERE session_id = $1 AND is_active = true`,
+            `SELECT *, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_activity)) / 60 AS minutes_elapsed
+             FROM sessions
+             WHERE session_id = $1 AND is_active = true`,
             [sessionId]
         );
 
         // Step 3: Check if session exists and is active
         if (sessionResult.rows.length === 0) {
             console.warn('Session not found or inactive:', sessionId);
-            res.clearCookie('session_id');
-            return res.redirect('/');
+            return handleSessionFailure();
         }
 
         const session = sessionResult.rows[0];
 
-        // Step 4: Check if session has timed out (90 minutes to account for timezone differences = 30 minutes real inactivity)
-        const lastActivity = new Date(session.last_activity);
-        const now = new Date();
-        const minutesElapsed = (now - lastActivity) / (1000 * 60);
+        // Step 4: Check if session has timed out using database time difference
+        const minutesElapsed = Number(session.minutes_elapsed);
 
-        if (minutesElapsed > 90) { // 90 minutes (30 real minutes + 60 min timezone offset)
+        if (!Number.isFinite(minutesElapsed) || minutesElapsed > sessionTimeoutMinutes) {
             console.warn('Session timeout for user:', session.username);
             await pool.query(
                 `UPDATE sessions SET is_active = false WHERE session_id = $1`,
                 [sessionId]
             );
-            res.clearCookie('session_id');
-            return res.redirect('/');
+            return handleSessionFailure();
         }
 
         // Step 5: Check if IP address matches (hijacking detection)
@@ -207,8 +281,7 @@ async function validateSession(req, res, next) {
                 `UPDATE sessions SET is_active = false WHERE session_id = $1`,
                 [sessionId]
             );
-            res.clearCookie('session_id');
-            return res.redirect('/');
+            return handleSessionFailure();
         }
 
         // Step 6: Check if user-agent matches (device/browser change detection)
@@ -222,8 +295,7 @@ async function validateSession(req, res, next) {
                 `UPDATE sessions SET is_active = false WHERE session_id = $1`,
                 [sessionId]
             );
-            res.clearCookie('session_id');
-            return res.redirect('/');
+            return handleSessionFailure();
         }
 
         // Step 7: Update last_activity timestamp
@@ -239,7 +311,7 @@ async function validateSession(req, res, next) {
         next();
     } catch (error) {
         console.error('Session validation error:', error.message);
-        return res.redirect('/');
+        return handleSessionFailure();
     }
 }
 
