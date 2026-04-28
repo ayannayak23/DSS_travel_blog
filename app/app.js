@@ -22,6 +22,10 @@ const dbConnectionString = process.env.DATABASE_URL;
 const recaptchaSiteKey = process.env.RECAPTCHA_SITE_KEY;
 const recaptchaSecretKey = process.env.RECAPTCHA_SECRET_KEY;
 const sessionTimeoutMinutes = 4;
+const MAX_USERNAME_LENGTH = 64;
+const MAX_PASSWORD_LENGTH = 256;
+const MAX_RECAPTCHA_TOKEN_LENGTH = 4096;
+const SESSION_ID_PATTERN = /^[a-f0-9]{64}$/i;
 
 if (!dbConnectionString) {
     console.error('Missing DATABASE_URL in app/.env.');
@@ -53,6 +57,18 @@ app.get('/', (req, res) => {
 // Store who is currently logged in
 let currentUser = null;
 let loginStatus = 'first_load';
+
+function getSafeString(value) {
+    return typeof value === 'string' ? value : '';
+}
+
+function isWithinMaxLength(value, maxLength) {
+    return value.length <= maxLength;
+}
+
+function isValidSessionId(sessionId) {
+    return typeof sessionId === 'string' && SESSION_ID_PATTERN.test(sessionId);
+}
 
 function sendLoginPage(res) {
     res.sendFile(__dirname + '/public/html/login.html', (err) => {
@@ -117,8 +133,8 @@ app.get('/ping', validateSession, (req, res) => {
 app.post('/', async function(req, res){
 
     // Step 1: Extracts username and password from the form
-    var username = (req.body.username_input || '').trim();
-    var password = req.body.password_input || '';
+    var username = getSafeString(req.body.username_input).trim();
+    var password = getSafeString(req.body.password_input);
 
     // Step 2: Check for empty fields
     if (username === '' || password === '') {
@@ -127,11 +143,27 @@ app.post('/', async function(req, res){
         return sendLoginPage(res);
     }
 
+    // Reject malformed or oversized input before it reaches the database layer
+    if (
+        !isWithinMaxLength(username, MAX_USERNAME_LENGTH) ||
+        !isWithinMaxLength(password, MAX_PASSWORD_LENGTH)
+    ) {
+        currentUser = null;
+        loginStatus = 'invalid';
+        return sendLoginPage(res);
+    }
+
     // Step 3: Validate reCAPTCHA token before checking credentials
-    const recaptchaToken = req.body['g-recaptcha-response'] || '';
+    const recaptchaToken = getSafeString(req.body['g-recaptcha-response']);
     if (recaptchaToken === '') {
         currentUser = null;
         loginStatus = 'captcha_required';
+        return sendLoginPage(res);
+    }
+
+    if (!isWithinMaxLength(recaptchaToken, MAX_RECAPTCHA_TOKEN_LENGTH)) {
+        currentUser = null;
+        loginStatus = 'captcha_failed';
         return sendLoginPage(res);
     }
 
@@ -239,6 +271,11 @@ async function validateSession(req, res, next) {
     // Step 1: Check if session cookie exists
     if (!sessionId) {
         console.warn('No session cookie found');
+        return handleSessionFailure();
+    }
+
+    if (!isValidSessionId(sessionId)) {
+        console.warn('Malformed session cookie received');
         return handleSessionFailure();
     }
 
