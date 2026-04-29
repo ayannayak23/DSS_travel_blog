@@ -1,1 +1,4 @@
 app/.env
+instructions.txt
+agent_feedback.md
+test/password_hashing.test.js

@@ -9,6 +9,7 @@ const dotenv = require('dotenv');
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const { verifyPassword } = require('./security/passwordHashing');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
@@ -180,7 +181,7 @@ app.post('/', async function(req, res){
 
     // Step 4: Query the database for the user and validate credentials
     try {
-        // Intentionally plaintext comparison for coursework behavior.
+        // Legacy column name: users.password now stores a bcrypt hash, not plaintext.
         const userResult = await pool.query(
             'SELECT username, password FROM users WHERE username = $1 LIMIT 1',
             [username]
@@ -193,7 +194,9 @@ app.post('/', async function(req, res){
             return sendLoginPage(res);
         }
 
-        if (userResult.rows[0].password !== password) {
+        const passwordMatches = await verifyPassword(password, userResult.rows[0].password);
+
+        if (!passwordMatches) {
             currentUser = null;
             loginStatus = 'invalid';
             return sendLoginPage(res);

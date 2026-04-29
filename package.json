@@ -1,8 +1,11 @@
 {
   "scripts": {
-    "start": "node app/app.js"
+    "start": "node app/app.js",
+    "migrate:passwords": "node scripts/migrate_passwords_to_bcrypt.js",
+    "test:hashing": "node test/password_hashing.test.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "body-parser": "^2.2.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.5.0",
