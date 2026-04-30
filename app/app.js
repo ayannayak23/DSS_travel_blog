@@ -3,42 +3,23 @@ const app = express();
 const port = 3000;
 
 var bodyParser = require('body-parser');
-const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const { verifyPassword } = require('./security/passwordHashing');
+const {
+    encryptForDatabase,
+    decryptFromDatabase
+} = require('./security/databaseEncryption');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-app.disable('x-powered-by');
-
-app.use((req, res, next) => {
-    res.setHeader(
-        'Content-Security-Policy',
-        "default-src 'self'; " +
-        "script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; " +
-        "style-src 'self' https://cdnjs.cloudflare.com; " +
-        "font-src 'self' https://cdnjs.cloudflare.com data:; " +
-        "img-src 'self' data: https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; " +
-        "frame-src https://www.google.com/recaptcha/; " +
-        "connect-src 'self'; " +
-        "object-src 'none'; " +
-        "base-uri 'self'; " +
-        "form-action 'self'; " +
-        "frame-ancestors 'none'"
-    );
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    next();
-});
-
 app.use(express.static(__dirname + '/public'));
 
-app.use(bodyParser.urlencoded({ extended: false, limit: '16kb' }));
-app.use(bodyParser.json({ limit: '16kb' }));
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 app.use(cookieParser());
 
 const dbConnectionString = process.env.DATABASE_URL;
@@ -48,8 +29,6 @@ const sessionTimeoutMinutes = 4;
 const MAX_USERNAME_LENGTH = 64;
 const MAX_PASSWORD_LENGTH = 256;
 const MAX_RECAPTCHA_TOKEN_LENGTH = 4096;
-const MAX_POST_TITLE_LENGTH = 120;
-const MAX_POST_CONTENT_LENGTH = 5000;
 const SESSION_ID_PATTERN = /^[a-f0-9]{64}$/i;
 
 if (!dbConnectionString) {
@@ -95,20 +74,36 @@ function isValidSessionId(sessionId) {
     return typeof sessionId === 'string' && SESSION_ID_PATTERN.test(sessionId);
 }
 
-function normalizeTextInput(value) {
-    if (typeof value !== 'string') {
-        return '';
-    }
-
-    return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
-}
-
 function sendLoginPage(res) {
     res.sendFile(__dirname + '/public/html/login.html', (err) => {
         if (err){
             console.log(err);
         }
     });
+}
+
+function buildPostFromRow(row) {
+    return {
+        username: row.username,
+        timestamp: row.created_at_display,
+        postId: row.post_id,
+        title: row.title,
+        content: decryptFromDatabase(row.content)
+    };
+}
+
+async function getNextPostId() {
+    const postIdResult = await pool.query('SELECT post_id FROM posts');
+    let maxId = 0;
+
+    for (const row of postIdResult.rows) {
+        const postId = Number.parseInt(row.post_id, 10);
+        if (Number.isFinite(postId) && postId > maxId) {
+            maxId = postId;
+        }
+    }
+
+    return String(maxId + 1);
 }
 
 // Verify the token from the browser with Google's siteverify API
@@ -150,6 +145,23 @@ app.get('/login-status', (req, res) => {
 
 app.get('/current-user', (req, res) => {
     res.json({ username: currentUser });
+});
+
+app.get('/posts-data', async (req, res) => {
+    try {
+        const postsResult = await pool.query(`
+            SELECT post_id, username, created_at_display, title, content
+            FROM posts
+            ORDER BY
+                CASE WHEN post_id ~ '^[0-9]+$' THEN post_id::integer ELSE 0 END,
+                post_id
+        `);
+
+        res.json(postsResult.rows.map(buildPostFromRow));
+    } catch (error) {
+        console.error('Failed to load encrypted posts:', error.message);
+        res.status(500).json([]);
+    }
 });
 
 // Expose only the public site key to the browser. Secret key stays server-side
@@ -213,7 +225,7 @@ app.post('/', async function(req, res){
 
     // Step 4: Query the database for the user and validate credentials
     try {
-        // Intentionally plaintext comparison for coursework behavior.
+        // Legacy column name: users.password now stores a bcrypt hash, not plaintext.
         const userResult = await pool.query(
             'SELECT username, password FROM users WHERE username = $1 LIMIT 1',
             [username]
@@ -226,7 +238,9 @@ app.post('/', async function(req, res){
             return sendLoginPage(res);
         }
 
-        if (userResult.rows[0].password !== password) {
+        const passwordMatches = await verifyPassword(password, userResult.rows[0].password);
+
+        if (!passwordMatches) {
             currentUser = null;
             loginStatus = 'invalid';
             return sendLoginPage(res);
@@ -251,7 +265,7 @@ app.post('/', async function(req, res){
         // Step 8: Create session in database
         try {
             await pool.query(
-                `INSERT INTO sessions (session_id, username, ip_address, user_agent, is_active) 
+                `INSERT INTO sessions (session_id, username, ip_address, user_agent, is_active)
                  VALUES ($1, $2, $3, $4, true)`,
                 [sessionId, username, ipAddress, userAgent]
             );
@@ -345,7 +359,7 @@ async function validateSession(req, res, next) {
         if (session.ip_address !== currentIp) {
             console.warn('IP mismatch detected for session:', sessionId);
             console.warn('Original IP:', session.ip_address, 'Current IP:', currentIp);
-            
+           
             // Invalidate session due to suspicious activity
             await pool.query(
                 `UPDATE sessions SET is_active = false WHERE session_id = $1`,
@@ -359,7 +373,7 @@ async function validateSession(req, res, next) {
             console.warn('User-agent mismatch detected for session:', sessionId);
             console.warn('Original user-agent:', session.user_agent);
             console.warn('Current user-agent:', currentUserAgent);
-            
+           
             // Invalidate session due to suspicious activity
             await pool.query(
                 `UPDATE sessions SET is_active = false WHERE session_id = $1`,
@@ -386,75 +400,48 @@ async function validateSession(req, res, next) {
 }
 
 // Make a post POST request
-app.post('/makepost', validateSession, function(req, res) {
+app.post('/makepost', validateSession, async function(req, res) {
+    try {
+        let curDate = new Date();
+        curDate = curDate.toLocaleString("en-GB");
 
-    const title = normalizeTextInput(req.body.title_field).trim();
-    const content = normalizeTextInput(req.body.content_field).trim();
-    const submittedPostId = normalizeTextInput(req.body.postId).trim();
+        const submittedPostId = getSafeString(req.body.postId);
+        const postId = submittedPostId === '' ? await getNextPostId() : submittedPostId;
+        const encryptedContent = encryptForDatabase(getSafeString(req.body.content_field));
 
-    if (
-        title === '' ||
-        content === '' ||
-        !isWithinMaxLength(title, MAX_POST_TITLE_LENGTH) ||
-        !isWithinMaxLength(content, MAX_POST_CONTENT_LENGTH)
-    ) {
-        return res.status(400).send('Invalid post content.');
+        // posts.content is encrypted before storage; titles stay plaintext for listing/search.
+        await pool.query(
+            `INSERT INTO posts (post_id, username, created_at_display, title, content)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (post_id)
+             DO UPDATE SET
+                username = EXCLUDED.username,
+                created_at_display = EXCLUDED.created_at_display,
+                title = EXCLUDED.title,
+                content = EXCLUDED.content`,
+            [postId, req.currentUser, curDate, getSafeString(req.body.title_field), encryptedContent]
+        );
+
+        res.sendFile(__dirname + "/public/html/my_posts.html");
+    } catch (error) {
+        console.error('Failed to save encrypted post:', error.message);
+        res.status(500).send('Unable to save post.');
     }
-
-    // Read in current posts
-    const json = fs.readFileSync(__dirname + '/public/json/posts.json');
-    var posts = JSON.parse(json);
-
-    // Get the current date
-    let curDate = new Date();
-    curDate = curDate.toLocaleString("en-GB");
-
-    // Find post with the highest ID
-    let maxId = 0;
-    for (let i = 0; i < posts.length; i++) {
-        if (posts[i].postId > maxId) {
-            maxId = posts[i].postId;
-        }
-    }
-
-    // Initialise ID for a new post
-    let newId = 0;
-
-    // If postId is empty, user is making a new post
-    if(submittedPostId === "") {
-        newId = maxId + 1;
-    } else { // If postID != empty, user is editing a post
-        newId = submittedPostId;
-
-        // Find post with the matching ID, delete it from posts so user can submit their new version
-        let index = posts.findIndex(item => item.postId == newId);
-        posts.splice(index, 1);
-    }
-
-    // Add post to posts.json
-    posts.push({"username": req.currentUser , "timestamp": curDate, "postId": newId, "title": title, "content": content});
-
-    fs.writeFileSync(__dirname + '/public/json/posts.json', JSON.stringify(posts));
-
-    // Redirect back to my_posts.html
-    res.sendFile(__dirname + "/public/html/my_posts.html");
  });
 
  // Delete a post POST request
- app.post('/deletepost', validateSession, (req, res) => {
+ app.post('/deletepost', validateSession, async (req, res) => {
+    try {
+        await pool.query(
+            'DELETE FROM posts WHERE post_id = $1',
+            [getSafeString(req.body.postId)]
+        );
 
-    // Read in current posts
-    const json = fs.readFileSync(__dirname + '/public/json/posts.json');
-    var posts = JSON.parse(json);
-
-    // Find post with matching ID and delete it
-    let index = posts.findIndex(item => item.postId == req.body.postId);
-    posts.splice(index, 1);
-
-    // Update posts.json
-    fs.writeFileSync(__dirname + '/public/json/posts.json', JSON.stringify(posts));
-
-    res.sendFile(__dirname + "/public/html/my_posts.html");
+        res.sendFile(__dirname + "/public/html/my_posts.html");
+    } catch (error) {
+        console.error('Failed to delete post:', error.message);
+        res.status(500).send('Unable to delete post.');
+    }
  });
 
 pool.query('SELECT 1')
