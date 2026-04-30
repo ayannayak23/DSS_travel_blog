@@ -5,16 +5,11 @@
         <meta charset="utf-8">
         <link rel="icon" type="image/png" href="../imgs/plane-icon.png">
         <link rel="stylesheet" href="../css/style.css">
+        <script src="../js/header.js" defer></script>
         <script src="../js/login.js" defer></script>
         <script src="https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoaded&render=explicit" defer></script>
-        <script src="../js/header.js"></script>
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                renderHeader('login');
-            });
-        </script>
     </head>
-    <body>
+    <body data-page="login">
         <div id="header"></div>
         <main>
         <p>Please enter your username and password to continue.</p>

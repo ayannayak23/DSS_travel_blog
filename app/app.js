@@ -12,10 +12,33 @@ const cookieParser = require('cookie-parser');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
+app.disable('x-powered-by');
+
+app.use((req, res, next) => {
+    res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self'; " +
+        "script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; " +
+        "style-src 'self' https://cdnjs.cloudflare.com; " +
+        "font-src 'self' https://cdnjs.cloudflare.com data:; " +
+        "img-src 'self' data: https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; " +
+        "frame-src https://www.google.com/recaptcha/; " +
+        "connect-src 'self'; " +
+        "object-src 'none'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'; " +
+        "frame-ancestors 'none'"
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+});
+
 app.use(express.static(__dirname + '/public'));
 
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: false, limit: '16kb' }));
+app.use(bodyParser.json({ limit: '16kb' }));
 app.use(cookieParser());
 
 const dbConnectionString = process.env.DATABASE_URL;
@@ -25,6 +48,8 @@ const sessionTimeoutMinutes = 4;
 const MAX_USERNAME_LENGTH = 64;
 const MAX_PASSWORD_LENGTH = 256;
 const MAX_RECAPTCHA_TOKEN_LENGTH = 4096;
+const MAX_POST_TITLE_LENGTH = 120;
+const MAX_POST_CONTENT_LENGTH = 5000;
 const SESSION_ID_PATTERN = /^[a-f0-9]{64}$/i;
 
 if (!dbConnectionString) {
@@ -68,6 +93,14 @@ function isWithinMaxLength(value, maxLength) {
 
 function isValidSessionId(sessionId) {
     return typeof sessionId === 'string' && SESSION_ID_PATTERN.test(sessionId);
+}
+
+function normalizeTextInput(value) {
+    if (typeof value !== 'string') {
+        return '';
+    }
+
+    return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
 }
 
 function sendLoginPage(res) {
@@ -355,6 +388,19 @@ async function validateSession(req, res, next) {
 // Make a post POST request
 app.post('/makepost', validateSession, function(req, res) {
 
+    const title = normalizeTextInput(req.body.title_field).trim();
+    const content = normalizeTextInput(req.body.content_field).trim();
+    const submittedPostId = normalizeTextInput(req.body.postId).trim();
+
+    if (
+        title === '' ||
+        content === '' ||
+        !isWithinMaxLength(title, MAX_POST_TITLE_LENGTH) ||
+        !isWithinMaxLength(content, MAX_POST_CONTENT_LENGTH)
+    ) {
+        return res.status(400).send('Invalid post content.');
+    }
+
     // Read in current posts
     const json = fs.readFileSync(__dirname + '/public/json/posts.json');
     var posts = JSON.parse(json);
@@ -375,10 +421,10 @@ app.post('/makepost', validateSession, function(req, res) {
     let newId = 0;
 
     // If postId is empty, user is making a new post
-    if(req.body.postId == "") {
+    if(submittedPostId === "") {
         newId = maxId + 1;
     } else { // If postID != empty, user is editing a post
-        newId = req.body.postId;
+        newId = submittedPostId;
 
         // Find post with the matching ID, delete it from posts so user can submit their new version
         let index = posts.findIndex(item => item.postId == newId);
@@ -386,7 +432,7 @@ app.post('/makepost', validateSession, function(req, res) {
     }
 
     // Add post to posts.json
-    posts.push({"username": req.currentUser , "timestamp": curDate, "postId": newId, "title": req.body.title_field, "content": req.body.content_field});
+    posts.push({"username": req.currentUser , "timestamp": curDate, "postId": newId, "title": title, "content": content});
 
     fs.writeFileSync(__dirname + '/public/json/posts.json', JSON.stringify(posts));
 
