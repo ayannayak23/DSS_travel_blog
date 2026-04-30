@@ -29,7 +29,34 @@ const sessionTimeoutMinutes = 4;
 const MAX_USERNAME_LENGTH = 64;
 const MAX_PASSWORD_LENGTH = 256;
 const MAX_RECAPTCHA_TOKEN_LENGTH = 4096;
+const MAX_POST_ID_LENGTH = 32;
+const MAX_POST_TITLE_LENGTH = 120;
+const MAX_POST_CONTENT_LENGTH = 5000;
 const SESSION_ID_PATTERN = /^[a-f0-9]{64}$/i;
+const PLAIN_TEXT_ONLY_PATTERN = /[<>]/;
+
+app.disable('x-powered-by');
+
+app.use((req, res, next) => {
+    res.setHeader(
+        'Content-Security-Policy',
+        [
+            "default-src 'self'",
+            "script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/",
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+            "img-src 'self' data: https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/",
+            "connect-src 'self' https://www.google.com/recaptcha/",
+            "frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "frame-ancestors 'none'"
+        ].join('; ')
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    next();
+});
 
 if (!dbConnectionString) {
     console.error('Missing DATABASE_URL in app/.env.');
@@ -72,6 +99,14 @@ function isWithinMaxLength(value, maxLength) {
 
 function isValidSessionId(sessionId) {
     return typeof sessionId === 'string' && SESSION_ID_PATTERN.test(sessionId);
+}
+
+function isValidPostId(postId) {
+    return postId === '' || (/^[0-9]+$/.test(postId) && isWithinMaxLength(postId, MAX_POST_ID_LENGTH));
+}
+
+function containsHtmlLikeInput(value) {
+    return PLAIN_TEXT_ONLY_PATTERN.test(value);
 }
 
 function sendLoginPage(res) {
@@ -279,6 +314,7 @@ app.post('/', async function(req, res){
         res.cookie('session_id', sessionId, {
             httpOnly: true,
             secure: false, // Set to true in production with HTTPS
+            sameSite: 'lax',
             maxAge: 30 * 60 * 1000 // 30 minutes
         });
 
@@ -405,9 +441,27 @@ app.post('/makepost', validateSession, async function(req, res) {
         let curDate = new Date();
         curDate = curDate.toLocaleString("en-GB");
 
-        const submittedPostId = getSafeString(req.body.postId);
+        const submittedPostId = getSafeString(req.body.postId).trim();
+        const title = getSafeString(req.body.title_field).trim();
+        const content = getSafeString(req.body.content_field).trim();
+
+        if (
+            title === '' ||
+            content === '' ||
+            !isValidPostId(submittedPostId) ||
+            !isWithinMaxLength(title, MAX_POST_TITLE_LENGTH) ||
+            !isWithinMaxLength(content, MAX_POST_CONTENT_LENGTH)
+        ) {
+            return res.status(400).send('Invalid post data.');
+        }
+
+        // This blog treats post fields as plain text, so reject HTML-significant input.
+        if (containsHtmlLikeInput(title) || containsHtmlLikeInput(content)) {
+            return res.status(400).send('Posts must use plain text only.');
+        }
+
         const postId = submittedPostId === '' ? await getNextPostId() : submittedPostId;
-        const encryptedContent = encryptForDatabase(getSafeString(req.body.content_field));
+        const encryptedContent = encryptForDatabase(content);
 
         // posts.content is encrypted before storage; titles stay plaintext for listing/search.
         await pool.query(
@@ -419,7 +473,7 @@ app.post('/makepost', validateSession, async function(req, res) {
                 created_at_display = EXCLUDED.created_at_display,
                 title = EXCLUDED.title,
                 content = EXCLUDED.content`,
-            [postId, req.currentUser, curDate, getSafeString(req.body.title_field), encryptedContent]
+            [postId, req.currentUser, curDate, title, encryptedContent]
         );
 
         res.sendFile(__dirname + "/public/html/my_posts.html");
@@ -432,9 +486,15 @@ app.post('/makepost', validateSession, async function(req, res) {
  // Delete a post POST request
  app.post('/deletepost', validateSession, async (req, res) => {
     try {
+        const postId = getSafeString(req.body.postId).trim();
+
+        if (!/^[0-9]+$/.test(postId) || !isWithinMaxLength(postId, MAX_POST_ID_LENGTH)) {
+            return res.status(400).send('Invalid post ID.');
+        }
+
         await pool.query(
             'DELETE FROM posts WHERE post_id = $1',
-            [getSafeString(req.body.postId)]
+            [postId]
         );
 
         res.sendFile(__dirname + "/public/html/my_posts.html");
