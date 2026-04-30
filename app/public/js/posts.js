@@ -2,7 +2,7 @@
 async function loadPosts() {
 
     // Load posts data
-    const post_response = await fetch("../json/posts.json");
+    const post_response = await fetch("/posts-data", { cache: 'no-store' });
     const post_data = await post_response.json();
 
     let postList = document.getElementById('postsList');

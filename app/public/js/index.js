@@ -2,7 +2,7 @@
 async function loadLatestPosts() {
 
     // Load posts data
-    const post_response = await fetch("../json/posts.json");
+    const post_response = await fetch("/posts-data", { cache: 'no-store' });
     const post_data = await post_response.json();
 
     // Remove current posts from page
@@ -15,7 +15,7 @@ async function loadLatestPosts() {
     }
 
     // Load latest 2 posts
-    for(let i = post_data.length - 1; i > post_data.length - 3; i--) {
+    for(let i = post_data.length - 1; i >= 0 && i > post_data.length - 3; i--) {
         let author = post_data[i].username;
         let timestamp = post_data[i].timestamp;
         let title = post_data[i].title;
