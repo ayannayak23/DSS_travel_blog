@@ -28,7 +28,7 @@ const pool = new Pool({
 async function ensurePostsTable(client) {
     await client.query(`
         CREATE TABLE IF NOT EXISTS posts (
-            post_id TEXT PRIMARY KEY,
+            post_id INTEGER PRIMARY KEY,
             username TEXT NOT NULL,
             created_at_display TEXT NOT NULL,
             title TEXT NOT NULL,
@@ -60,7 +60,12 @@ async function migratePosts() {
         const existingPostIds = new Set();
 
         for (const row of existingResult.rows) {
-            existingPostIds.add(row.post_id);
+            const postId = Number(row.post_id);
+            if (!Number.isFinite(postId)) {
+                continue;
+            }
+
+            existingPostIds.add(postId);
 
             if (isEncryptedValue(row.content)) {
                 skippedEncryptedCount += 1;
@@ -70,13 +75,18 @@ async function migratePosts() {
             const encryptedContent = encryptForDatabase(row.content || '');
             await client.query(
                 'UPDATE posts SET content = $1 WHERE post_id = $2',
-                [encryptedContent, row.post_id]
+                [encryptedContent, postId]
             );
             encryptedExistingCount += 1;
         }
 
         for (const post of loadJsonPosts()) {
-            const postId = String(post.postId);
+            const postId = Number.parseInt(String(post.postId), 10);
+
+            if (!Number.isFinite(postId)) {
+                skippedJsonCount += 1;
+                continue;
+            }
 
             if (existingPostIds.has(postId)) {
                 skippedJsonCount += 1;

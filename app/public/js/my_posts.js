@@ -56,6 +56,8 @@ async function loadPosts() {
             timeContainer.textContent = timestamp;
             figcap.appendChild(timeContainer);
 
+            await appendPostImages(postId, figcap, true);
+
             let contentContainer = document.createElement('p');
             contentContainer.id = "content";
             contentContainer.textContent = content;
@@ -159,3 +161,129 @@ function searchPosts() {
 }
 
 document.getElementById("search").addEventListener("keyup", searchPosts);
+
+const postForm = document.getElementById('postForm');
+if (postForm) {
+    postForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        clearPostError();
+
+        try {
+            const formData = new FormData(postForm);
+            const response = await fetch('/makepost', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.status === 401) {
+                window.location.href = '/';
+                return;
+            }
+
+            if (!response.ok) {
+                const message = await response.text();
+                showPostError(message || 'Unable to save post.');
+                return;
+            }
+
+            postForm.reset();
+            const postIdField = document.getElementById('postId');
+            if (postIdField) {
+                postIdField.value = '';
+            }
+            await loadPosts();
+        } catch (error) {
+            showPostError('Unable to save post. Please try again.');
+        }
+    });
+}
+
+function showPostError(message) {
+    const errorEl = document.getElementById('post_error');
+    if (!errorEl) {
+        return;
+    }
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+}
+
+function clearPostError() {
+    const errorEl = document.getElementById('post_error');
+    if (!errorEl) {
+        return;
+    }
+    errorEl.textContent = '';
+    errorEl.hidden = true;
+}
+
+// Load and render images for a single post
+async function appendPostImages(postId, targetContainer, allowDelete) {
+    try {
+        const response = await fetch(`/post-images-data?postId=${encodeURIComponent(postId)}`, { cache: 'no-store' });
+
+        if (!response.ok) {
+            return;
+        }
+
+        const images = await response.json();
+
+        if (!Array.isArray(images) || images.length === 0) {
+            return;
+        }
+
+        const imageWrap = document.createElement('div');
+        imageWrap.classList.add('post-images');
+
+        for (const image of images) {
+            const imageItem = document.createElement('div');
+            imageItem.classList.add('post-image-item');
+
+            const imageTag = document.createElement('img');
+            imageTag.classList.add('post-image');
+            imageTag.src = `/post-images/${image.imageId}`;
+            imageTag.alt = 'Post image';
+            imageItem.appendChild(imageTag);
+
+            if (allowDelete) {
+                const deleteButton = document.createElement('button');
+                deleteButton.classList.add('image-delete-btn');
+                deleteButton.textContent = 'Remove image';
+                deleteButton.dataset.imageId = image.imageId;
+                deleteButton.addEventListener('click', deleteImage);
+                imageItem.appendChild(deleteButton);
+            }
+
+            imageWrap.appendChild(imageItem);
+        }
+
+        targetContainer.appendChild(imageWrap);
+    } catch (error) {
+        console.error('Failed to load post images:', error);
+    }
+}
+
+// Remove a single image from the post and update the UI
+async function deleteImage(e) {
+    const imageId = e.target.dataset.imageId;
+
+    if (!imageId) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/deleteimage', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ imageId })
+        });
+
+        if (response.ok) {
+            const imageItem = e.target.parentNode;
+            imageItem.remove();
+        }
+    } catch (error) {
+        console.error('Failed to delete image:', error);
+    }
+}

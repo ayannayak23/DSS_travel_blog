@@ -8,6 +8,7 @@ const dotenv = require('dotenv');
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const multer = require('multer');
 const { verifyPassword } = require('./security/passwordHashing');
 const {
     encryptForDatabase,
@@ -32,8 +33,29 @@ const MAX_RECAPTCHA_TOKEN_LENGTH = 4096;
 const MAX_POST_ID_LENGTH = 32;
 const MAX_POST_TITLE_LENGTH = 120;
 const MAX_POST_CONTENT_LENGTH = 5000;
+const MAX_IMAGES_PER_POST = 5;
+const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const SESSION_ID_PATTERN = /^[a-f0-9]{64}$/i;
 const PLAIN_TEXT_ONLY_PATTERN = /[<>]/;
+
+// Multer handles in-memory image uploads for posts
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: MAX_IMAGE_SIZE_BYTES,
+        files: MAX_IMAGES_PER_POST
+    },
+    fileFilter: (req, file, cb) => {
+        if (ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+            return cb(null, true);
+        }
+
+        const error = new Error('Invalid image type.');
+        error.code = 'INVALID_IMAGE_TYPE';
+        return cb(error);
+    }
+});
 
 app.disable('x-powered-by');
 
@@ -101,8 +123,21 @@ function isValidSessionId(sessionId) {
     return typeof sessionId === 'string' && SESSION_ID_PATTERN.test(sessionId);
 }
 
-function isValidPostId(postId) {
-    return postId === '' || (/^[0-9]+$/.test(postId) && isWithinMaxLength(postId, MAX_POST_ID_LENGTH));
+function parsePostId(postId) {
+    if (postId === '') {
+        return null;
+    }
+
+    if (!/^[0-9]+$/.test(postId) || !isWithinMaxLength(postId, MAX_POST_ID_LENGTH)) {
+        return null;
+    }
+
+    const parsed = Number.parseInt(postId, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return null;
+    }
+
+    return parsed;
 }
 
 function containsHtmlLikeInput(value) {
@@ -128,17 +163,9 @@ function buildPostFromRow(row) {
 }
 
 async function getNextPostId() {
-    const postIdResult = await pool.query('SELECT post_id FROM posts');
-    let maxId = 0;
-
-    for (const row of postIdResult.rows) {
-        const postId = Number.parseInt(row.post_id, 10);
-        if (Number.isFinite(postId) && postId > maxId) {
-            maxId = postId;
-        }
-    }
-
-    return String(maxId + 1);
+    const postIdResult = await pool.query('SELECT COALESCE(MAX(post_id), 0) AS max_id FROM posts');
+    const maxId = Number(postIdResult.rows[0]?.max_id) || 0;
+    return maxId + 1;
 }
 
 // Verify the token from the browser with Google's siteverify API
@@ -187,15 +214,68 @@ app.get('/posts-data', async (req, res) => {
         const postsResult = await pool.query(`
             SELECT post_id, username, created_at_display, title, content
             FROM posts
-            ORDER BY
-                CASE WHEN post_id ~ '^[0-9]+$' THEN post_id::integer ELSE 0 END,
-                post_id
+            ORDER BY post_id
         `);
 
         res.json(postsResult.rows.map(buildPostFromRow));
     } catch (error) {
         console.error('Failed to load encrypted posts:', error.message);
         res.status(500).json([]);
+    }
+});
+
+// Return image metadata for a post
+app.get('/post-images-data', validateSession, async (req, res) => {
+    try {
+        const postId = parsePostId(getSafeString(req.query.postId || '').trim());
+
+        if (postId === null) {
+            return res.status(400).json([]);
+        }
+
+        const imagesResult = await pool.query(
+            `SELECT image_id, mime_type, size_bytes
+             FROM post_images
+             WHERE post_id = $1
+             ORDER BY sort_order, image_id`,
+            [postId]
+        );
+
+        res.json(imagesResult.rows.map((row) => ({
+            imageId: row.image_id,
+            mimeType: row.mime_type,
+            sizeBytes: row.size_bytes
+        })));
+    } catch (error) {
+        console.error('Failed to load post images:', error.message);
+        res.status(500).json([]);
+    }
+});
+
+// Serve the image bytes for a single image
+app.get('/post-images/:imageId', validateSession, async (req, res) => {
+    try {
+        const imageId = Number.parseInt(String(req.params.imageId || ''), 10);
+
+        if (!Number.isFinite(imageId)) {
+            return res.status(400).end();
+        }
+
+        const imageResult = await pool.query(
+            'SELECT image_data, mime_type FROM post_images WHERE image_id = $1',
+            [imageId]
+        );
+
+        if (imageResult.rows.length === 0) {
+            return res.status(404).end();
+        }
+
+        res.setHeader('Content-Type', imageResult.rows[0].mime_type);
+        res.setHeader('Cache-Control', 'no-store');
+        return res.send(imageResult.rows[0].image_data);
+    } catch (error) {
+        console.error('Failed to load image:', error.message);
+        return res.status(500).end();
     }
 });
 
@@ -340,8 +420,12 @@ async function validateSession(req, res, next) {
         res.clearCookie('session_id');
 
         // /ping is called via fetch, so return JSON + 401 for reliable client-side handling
-        if (req.path === '/ping') {
+        if (req.path === '/ping' || req.path === '/post-images-data') {
             return res.status(401).json({ status: 'session_invalid' });
+        }
+
+        if (req.path.startsWith('/post-images/')) {
+            return res.status(401).end();
         }
 
         return res.redirect('/');
@@ -436,19 +520,20 @@ async function validateSession(req, res, next) {
 }
 
 // Make a post POST request
-app.post('/makepost', validateSession, async function(req, res) {
+app.post('/makepost', validateSession, upload.array('image_files', MAX_IMAGES_PER_POST), async function(req, res) {
     try {
         let curDate = new Date();
         curDate = curDate.toLocaleString("en-GB");
 
         const submittedPostId = getSafeString(req.body.postId).trim();
+        const parsedPostId = parsePostId(submittedPostId);
         const title = getSafeString(req.body.title_field).trim();
         const content = getSafeString(req.body.content_field).trim();
 
         if (
             title === '' ||
             content === '' ||
-            !isValidPostId(submittedPostId) ||
+            (submittedPostId !== '' && parsedPostId === null) ||
             !isWithinMaxLength(title, MAX_POST_TITLE_LENGTH) ||
             !isWithinMaxLength(content, MAX_POST_CONTENT_LENGTH)
         ) {
@@ -460,7 +545,18 @@ app.post('/makepost', validateSession, async function(req, res) {
             return res.status(400).send('Posts must use plain text only.');
         }
 
-        const postId = submittedPostId === '' ? await getNextPostId() : submittedPostId;
+        const postId = parsedPostId ?? await getNextPostId();
+        const uploadedFiles = Array.isArray(req.files) ? req.files : [];
+        // Enforce per-post image limit before storing any new files
+        const existingImageCountResult = await pool.query(
+            'SELECT COUNT(*) AS count FROM post_images WHERE post_id = $1',
+            [postId]
+        );
+        const existingImageCount = Number(existingImageCountResult.rows[0]?.count) || 0;
+
+        if (existingImageCount + uploadedFiles.length > MAX_IMAGES_PER_POST) {
+            return res.status(400).send(`You can upload up to ${MAX_IMAGES_PER_POST} images per post.`);
+        }
         const encryptedContent = encryptForDatabase(content);
 
         // posts.content is encrypted before storage; titles stay plaintext for listing/search.
@@ -476,6 +572,27 @@ app.post('/makepost', validateSession, async function(req, res) {
             [postId, req.currentUser, curDate, title, encryptedContent]
         );
 
+        // Persist each uploaded image in the post_images table
+        if (uploadedFiles.length > 0) {
+            const startOrder = existingImageCount;
+
+            for (let i = 0; i < uploadedFiles.length; i += 1) {
+                const file = uploadedFiles[i];
+                await pool.query(
+                    `INSERT INTO post_images (post_id, filename, mime_type, size_bytes, image_data, sort_order)
+                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [
+                        postId,
+                        file.originalname || null,
+                        file.mimetype,
+                        file.size,
+                        file.buffer,
+                        startOrder + i
+                    ]
+                );
+            }
+        }
+
         res.sendFile(__dirname + "/public/html/my_posts.html");
     } catch (error) {
         console.error('Failed to save encrypted post:', error.message);
@@ -486,9 +603,10 @@ app.post('/makepost', validateSession, async function(req, res) {
  // Delete a post POST request
  app.post('/deletepost', validateSession, async (req, res) => {
     try {
-        const postId = getSafeString(req.body.postId).trim();
+        const submittedPostId = getSafeString(req.body.postId).trim();
+        const postId = parsePostId(submittedPostId);
 
-        if (!/^[0-9]+$/.test(postId) || !isWithinMaxLength(postId, MAX_POST_ID_LENGTH)) {
+        if (postId === null) {
             return res.status(400).send('Invalid post ID.');
         }
 
@@ -503,6 +621,49 @@ app.post('/makepost', validateSession, async function(req, res) {
         res.status(500).send('Unable to delete post.');
     }
  });
+
+// Allow the post owner to remove a single image
+app.post('/deleteimage', validateSession, async (req, res) => {
+    try {
+        const imageId = Number.parseInt(getSafeString(req.body.imageId).trim(), 10);
+
+        if (!Number.isFinite(imageId)) {
+            return res.status(400).json({ ok: false });
+        }
+
+        const deleteResult = await pool.query(
+            `DELETE FROM post_images
+             USING posts
+             WHERE post_images.image_id = $1
+               AND post_images.post_id = posts.post_id
+               AND posts.username = $2
+             RETURNING post_images.image_id`,
+            [imageId, req.currentUser]
+        );
+
+        if (deleteResult.rowCount === 0) {
+            return res.status(403).json({ ok: false });
+        }
+
+        return res.json({ ok: true });
+    } catch (error) {
+        console.error('Failed to delete image:', error.message);
+        return res.status(500).json({ ok: false });
+    }
+});
+
+// Friendly upload error messages for invalid files or limits
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        return res.status(400).send('Image upload failed. Please check file size and count.');
+    }
+
+    if (err && err.code === 'INVALID_IMAGE_TYPE') {
+        return res.status(400).send('Only PNG, JPG, or WEBP images are allowed.');
+    }
+
+    return next(err);
+});
 
 pool.query('SELECT 1')
     .then(() => {
