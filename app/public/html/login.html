@@ -12,19 +12,56 @@
     <body data-page="login">
         <div id="header"></div>
         <main>
-        <p>Please enter your username and password to continue.</p>
+            <div class="auth-toggle" role="tablist" aria-label="Authentication options">
+                <button type="button" id="login_tab" class="auth-tab active" aria-controls="login_panel" aria-selected="true">Login</button>
+                <button type="button" id="signup_tab" class="auth-tab" aria-controls="signup_panel" aria-selected="false">Sign up</button>
+            </div>
 
-        <form method="post" action="/" id="login_form">
-            <label for="username_input">Username:</label>
-            <input type="text" id="username_input" name="username_input" placeholder="Please enter your username..." maxlength="64">
+            <section id="login_panel" class="auth-panel">
+                <p>Please enter your email and password to continue.</p>
 
-            <label for="password_input">Password:</label>
-            <input type="password" id="password_input" name="password_input" placeholder="Please enter your password..." maxlength="256">
+                <form method="post" action="/" id="login_form">
+                    <label for="username_input">Email:</label>
+                    <input type="text" id="username_input" name="username_input" placeholder="Please enter your email..." maxlength="254" autocomplete="email">
 
-            <div id="recaptcha_container"></div>
+                    <label for="password_input">Password:</label>
+                    <input type="password" id="password_input" name="password_input" placeholder="Please enter your password..." maxlength="256" autocomplete="current-password">
 
-            <button id="login_btn" type="submit">Log in</button>
-        </form>
+                    <div id="recaptcha_container"></div>
+
+                    <p id="login_message" class="form-message" aria-live="polite"></p>
+                    <button id="login_btn" type="submit">Log in</button>
+                </form>
+            </section>
+
+            <section id="signup_panel" class="auth-panel" hidden>
+                <p>Create an account with your email and a strong password.</p>
+
+                <form method="post" action="/signup" id="signup_form">
+                    <label for="signup_username_input">Username:</label>
+                    <input type="text" id="signup_username_input" name="signup_username_input" placeholder="Choose a public username..." maxlength="20" autocomplete="username" required>
+
+                    <label for="signup_email_input">Email:</label>
+                    <input type="email" id="signup_email_input" name="signup_email_input" placeholder="Please enter your email..." maxlength="254" autocomplete="email" required>
+
+                    <label for="signup_password_input">Password:</label>
+                    <input type="password" id="signup_password_input" name="signup_password_input" placeholder="Please enter a password..." maxlength="256" autocomplete="new-password" required>
+
+                    <label for="signup_password_confirm_input">Password Confirmation:</label>
+                    <input type="password" id="signup_password_confirm_input" name="signup_password_confirm_input" placeholder="Please confirm your password..." maxlength="256" autocomplete="new-password" required>
+
+                    <ul id="password_rules" class="password-rules" aria-live="polite">
+                        <li data-rule="lowercase"><span aria-hidden="true">X</span> A lowercase letter</li>
+                        <li data-rule="uppercase"><span aria-hidden="true">X</span> A capital uppercase letter</li>
+                        <li data-rule="number"><span aria-hidden="true">X</span> A number</li>
+                        <li data-rule="minLength"><span aria-hidden="true">X</span> Minimum 8 characters</li>
+                        <li data-rule="special"><span aria-hidden="true">X</span> A special character, for example !, @, #</li>
+                    </ul>
+
+                    <p id="signup_message" class="form-message" aria-live="polite"></p>
+                    <button id="signup_btn" type="submit">Sign Up</button>
+                </form>
+            </section>
         </main>
     </body>
 </html>

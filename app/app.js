@@ -9,7 +9,14 @@ const { Pool } = require('pg');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
-const { verifyPassword } = require('./security/passwordHashing');
+const {
+    hashPassword,
+    verifyPassword
+} = require('./security/passwordHashing');
+const {
+    normalizeEmail,
+    validateSignupInput
+} = require('./security/signupValidation');
 const {
     encryptForDatabase,
     decryptFromDatabase
@@ -29,6 +36,7 @@ const recaptchaSecretKey = process.env.RECAPTCHA_SECRET_KEY;
 const sessionTimeoutMinutes = 4;
 const MAX_USERNAME_LENGTH = 64;
 const MAX_PASSWORD_LENGTH = 256;
+const MAX_EMAIL_LENGTH = 254;
 const MAX_RECAPTCHA_TOKEN_LENGTH = 4096;
 const MAX_POST_ID_LENGTH = 32;
 const MAX_POST_TITLE_LENGTH = 120;
@@ -154,7 +162,7 @@ function sendLoginPage(res) {
 
 function buildPostFromRow(row) {
     return {
-        username: row.username,
+        username: row.author_name || 'Unknown user',
         timestamp: row.created_at_display,
         postId: row.post_id,
         title: row.title,
@@ -212,9 +220,22 @@ app.get('/current-user', (req, res) => {
 app.get('/posts-data', async (req, res) => {
     try {
         const postsResult = await pool.query(`
-            SELECT post_id, username, created_at_display, title, content
+            SELECT
+                posts.post_id,
+                COALESCE(
+                    NULLIF(users.display_name, ''),
+                    CASE
+                        WHEN posts.username LIKE '%@%' THEN split_part(posts.username, '@', 1)
+                        WHEN NULLIF(posts.username, '') IS NOT NULL THEN posts.username
+                        ELSE 'Unknown user'
+                    END
+                ) AS author_name,
+                posts.created_at_display,
+                posts.title,
+                posts.content
             FROM posts
-            ORDER BY post_id
+            LEFT JOIN users ON LOWER(users.username) = LOWER(posts.username)
+            ORDER BY posts.post_id
         `);
 
         res.json(postsResult.rows.map(buildPostFromRow));
@@ -293,7 +314,8 @@ app.get('/ping', validateSession, (req, res) => {
 app.post('/', async function(req, res){
 
     // Step 1: Extracts username and password from the form
-    var username = getSafeString(req.body.username_input).trim();
+    var usernameInput = getSafeString(req.body.username_input).trim();
+    var username = usernameInput.includes('@') ? normalizeEmail(usernameInput) : usernameInput;
     var password = getSafeString(req.body.password_input);
 
     // Step 2: Check for empty fields
@@ -305,7 +327,7 @@ app.post('/', async function(req, res){
 
     // Reject malformed or oversized input before it reaches the database layer
     if (
-        !isWithinMaxLength(username, MAX_USERNAME_LENGTH) ||
+        !isWithinMaxLength(username, MAX_EMAIL_LENGTH) ||
         !isWithinMaxLength(password, MAX_PASSWORD_LENGTH)
     ) {
         currentUser = null;
@@ -414,13 +436,82 @@ app.post('/', async function(req, res){
     }
 });
 
+app.get('/my-posts-data', validateSession, async (req, res) => {
+    try {
+        const postsResult = await pool.query(`
+            SELECT
+                posts.post_id,
+                COALESCE(NULLIF(users.display_name, ''), 'Unknown user') AS author_name,
+                posts.created_at_display,
+                posts.title,
+                posts.content
+            FROM posts
+            LEFT JOIN users ON LOWER(users.username) = LOWER(posts.username)
+            WHERE posts.username = $1
+            ORDER BY posts.post_id
+        `, [req.currentUser]);
+
+        res.json(postsResult.rows.map(buildPostFromRow));
+    } catch (error) {
+        console.error('Failed to load user posts:', error.message);
+        res.status(500).json([]);
+    }
+});
+
+app.post('/signup', async function(req, res) {
+    const displayNameInput = getSafeString(req.body.signup_username_input);
+    const emailInput = getSafeString(req.body.signup_email_input);
+    const password = getSafeString(req.body.signup_password_input);
+    const passwordConfirmation = getSafeString(req.body.signup_password_confirm_input);
+    const validation = validateSignupInput(displayNameInput, emailInput, password, passwordConfirmation);
+
+    if (!validation.ok || !isWithinMaxLength(validation.email, MAX_EMAIL_LENGTH)) {
+        return res.redirect('/?mode=signup&signup=' + encodeURIComponent(validation.code || 'invalid'));
+    }
+
+    try {
+        const duplicateResult = await pool.query(
+            'SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
+            [validation.email]
+        );
+
+        if (duplicateResult.rows.length > 0) {
+            return res.redirect('/?mode=signup&signup=duplicate');
+        }
+
+        const duplicateDisplayNameResult = await pool.query(
+            'SELECT 1 FROM users WHERE LOWER(display_name) = LOWER($1) LIMIT 1',
+            [validation.displayName]
+        );
+
+        if (duplicateDisplayNameResult.rows.length > 0) {
+            return res.redirect('/?mode=signup&signup=duplicate_username');
+        }
+
+        const passwordHash = await hashPassword(password);
+        await pool.query(
+            'INSERT INTO users (username, display_name, password) VALUES ($1, $2, $3)',
+            [validation.email, validation.displayName, passwordHash]
+        );
+
+        return res.redirect('/?mode=login&signup=created');
+    } catch (error) {
+        if (error && error.code === '23505') {
+            return res.redirect('/?mode=signup&signup=duplicate');
+        }
+
+        console.error('Sign-up failed:', error.message);
+        return res.redirect('/?mode=signup&signup=server_error');
+    }
+});
+
 // Session Validation Middleware - Prevents Session Hijacking
 async function validateSession(req, res, next) {
     const handleSessionFailure = async () => {
         res.clearCookie('session_id');
 
         // /ping is called via fetch, so return JSON + 401 for reliable client-side handling
-        if (req.path === '/ping' || req.path === '/post-images-data') {
+        if (req.path === '/ping' || req.path === '/post-images-data' || req.path === '/my-posts-data') {
             return res.status(401).json({ status: 'session_invalid' });
         }
 
