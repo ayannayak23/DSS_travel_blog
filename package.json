@@ -2,9 +2,11 @@
   "scripts": {
     "start": "node app/app.js",
     "migrate:passwords": "node scripts/migrate_passwords_to_bcrypt.js",
+    "migrate:users": "node scripts/migrate_users_for_signup.js",
     "migrate:encrypt-posts": "node scripts/migrate_posts_to_encrypted.js",
     "test:hashing": "node test/password_hashing.test.js",
-    "test:encryption": "node test/database_encryption.test.js"
+    "test:encryption": "node test/database_encryption.test.js",
+    "test:signup": "node test/signup_validation.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

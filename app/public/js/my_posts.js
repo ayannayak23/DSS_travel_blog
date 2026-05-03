@@ -2,12 +2,14 @@
 async function loadPosts() {
 
     // Load posts data
-    const post_response = await fetch("/posts-data", { cache: 'no-store' });
-    const post_data = await post_response.json();
+    const post_response = await fetch("/my-posts-data", { cache: 'no-store' });
 
-    // Load currently logged-in user
-    const user_response = await fetch('/current-user', { cache: 'no-store' });
-    const user_data = await user_response.json();
+    if (post_response.status === 401) {
+        window.location.href = '/';
+        return;
+    }
+
+    const post_data = await post_response.json();
 
     // Remove current posts
     let postList = document.getElementById('myPosts');
@@ -20,63 +22,58 @@ async function loadPosts() {
 
     // Add posts made by current user
     for(let i = 0; i < post_data.length; i++) {
-        
         let author = post_data[i].username;
+        let timestamp = post_data[i].timestamp;
+        let title = post_data[i].title;
+        let content = post_data[i].content;
+        let postId = post_data[i].postId;
 
-        // Check usernames match on each post
-        if(author === user_data.username) {
-            let timestamp = post_data[i].timestamp;
-            let title = post_data[i].title;
-            let content = post_data[i].content;
-            let postId = post_data[i].postId;
+        let postContainer = document.createElement('article');
+        postContainer.classList.add("post");
+        let fig = document.createElement('figure');
+        postContainer.appendChild(fig);
 
-            let postContainer = document.createElement('article');
-            postContainer.classList.add("post");
-            let fig = document.createElement('figure');
-            postContainer.appendChild(fig);
+        let postIdContainer = document.createElement("h6");
+        postIdContainer.textContent = postId;
+        postIdContainer.hidden = true;
+        postId.id = "postId";
+        postContainer.appendChild(postIdContainer);
 
-            let postIdContainer = document.createElement("h6");
-            postIdContainer.textContent = postId;
-            postIdContainer.hidden = true;
-            postId.id = "postId";
-            postContainer.appendChild(postIdContainer);
+        let figcap = document.createElement('figcaption');
+        fig.appendChild(figcap);
 
-            let figcap = document.createElement('figcaption');
-            fig.appendChild(figcap);
-            
-            let titleContainer = document.createElement('h3');
-            titleContainer.textContent = title;
-            figcap.appendChild(titleContainer);
-            
-            let usernameContainer = document.createElement('h5');
-            usernameContainer.textContent = author;
-            figcap.appendChild(usernameContainer);
+        let titleContainer = document.createElement('h3');
+        titleContainer.textContent = title;
+        figcap.appendChild(titleContainer);
 
-            let timeContainer = document.createElement('h5');
-            timeContainer.textContent = timestamp;
-            figcap.appendChild(timeContainer);
+        let usernameContainer = document.createElement('h5');
+        usernameContainer.textContent = author;
+        figcap.appendChild(usernameContainer);
 
-            await appendPostImages(postId, figcap, true);
+        let timeContainer = document.createElement('h5');
+        timeContainer.textContent = timestamp;
+        figcap.appendChild(timeContainer);
 
-            let contentContainer = document.createElement('p');
-            contentContainer.id = "content";
-            contentContainer.textContent = content;
-            figcap.appendChild(contentContainer);
+        await appendPostImages(postId, figcap, true);
 
-            let editBtn = document.createElement('button');
-            editBtn.classList.add('editBtn');
-            editBtn.textContent = "Edit";
-            editBtn.addEventListener("click", editPost);
-            postContainer.appendChild(editBtn);
+        let contentContainer = document.createElement('p');
+        contentContainer.id = "content";
+        contentContainer.textContent = content;
+        figcap.appendChild(contentContainer);
 
-            let delBtn = document.createElement('button');
-            delBtn.classList.add('delBtn');
-            delBtn.textContent = "Delete";
-            delBtn.addEventListener("click", deletePost);
-            postContainer.appendChild(delBtn);
+        let editBtn = document.createElement('button');
+        editBtn.classList.add('editBtn');
+        editBtn.textContent = "Edit";
+        editBtn.addEventListener("click", editPost);
+        postContainer.appendChild(editBtn);
 
-            postList.insertBefore(postContainer, document.querySelectorAll("article")[0]);
-        }
+        let delBtn = document.createElement('button');
+        delBtn.classList.add('delBtn');
+        delBtn.textContent = "Delete";
+        delBtn.addEventListener("click", deletePost);
+        postContainer.appendChild(delBtn);
+
+        postList.insertBefore(postContainer, document.querySelectorAll("article")[0]);
     }
 }
 
@@ -90,7 +87,7 @@ function deletePost(e) {
 
     // Put post in object to be the body of fetch request
     const postData = {
-        postId: post.getElementsByTagName('h6')[0].textContent, 
+        postId: post.getElementsByTagName('h6')[0].textContent,
     };
 
     const requestHeaders = {
@@ -113,7 +110,7 @@ function editPost(e) {
 
     // Get post that the user clicked on
     let post = e.target.parentNode;
-   
+
     // Fill out form fields with data grabbed from post
     document.getElementById("title_field").value = post.getElementsByTagName('h3')[0].textContent;
     document.getElementById("content_field").value = post.getElementsByTagName('p')[0].textContent;
