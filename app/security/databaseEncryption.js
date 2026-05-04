@@ -1,10 +1,16 @@
+/**
+ * Provides AES-256-GCM helpers for encrypting and decrypting database fields.
+ * The encryption key is loaded from the environment so it is not stored in source code or PostgreSQL.
+ */
 const crypto = require('crypto');
 
+// Versioned format: enc:v1:<ivHex>:<authTagHex>:<ciphertextHex>
 const ENCRYPTION_PREFIX = 'enc:v1:';
 const KEY_PATTERN = /^[a-f0-9]{64}$/i;
 const IV_LENGTH_BYTES = 12;
 const AUTH_TAG_LENGTH_BYTES = 16;
 
+// Load the 256-bit encryption key at runtime and reject malformed keys early.
 function getEncryptionKey() {
     const keyHex = process.env.DATABASE_ENCRYPTION_KEY;
 
@@ -15,10 +21,12 @@ function getEncryptionKey() {
     return Buffer.from(keyHex, 'hex');
 }
 
+// Identify values already encrypted by this helper, including migrated post content.
 function isEncryptedValue(value) {
     return typeof value === 'string' && value.startsWith(ENCRYPTION_PREFIX);
 }
 
+// Encrypt one database value with a fresh IV; GCM also creates an auth tag for tamper detection.
 function encryptForDatabase(plainText) {
     if (plainText === null || plainText === undefined || plainText === '') {
         return plainText ?? null;
@@ -32,6 +40,7 @@ function encryptForDatabase(plainText) {
     ]);
     const authTag = cipher.getAuthTag();
 
+    // Store the prefix, IV, auth tag, and ciphertext together so the server can decrypt later.
     return [
         'enc',
         'v1',
@@ -41,6 +50,7 @@ function encryptForDatabase(plainText) {
     ].join(':');
 }
 
+// Decrypt database content on the server before it is rendered or returned by routes.
 function decryptFromDatabase(storedValue) {
     if (storedValue === null || storedValue === undefined || storedValue === '') {
         return storedValue ?? null;
@@ -72,6 +82,7 @@ function decryptFromDatabase(storedValue) {
     );
     decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
 
+    // decipher.final() verifies the auth tag and throws if the ciphertext was modified.
     const plaintext = Buffer.concat([
         decipher.update(Buffer.from(ciphertextHex, 'hex')),
         decipher.final()
