@@ -54,8 +54,6 @@ async function loadPosts() {
         timeContainer.textContent = timestamp;
         figcap.appendChild(timeContainer);
 
-        await appendPostImages(postId, figcap, true);
-
         let contentContainer = document.createElement('p');
         contentContainer.id = "content";
         contentContainer.textContent = content;
@@ -74,6 +72,7 @@ async function loadPosts() {
         postContainer.appendChild(delBtn);
 
         postList.insertBefore(postContainer, document.querySelectorAll("article")[0]);
+        appendPostImages(postId, figcap, true, contentContainer);
     }
 }
 
@@ -214,7 +213,7 @@ function clearPostError() {
 }
 
 // Load and render images for a single post
-async function appendPostImages(postId, targetContainer, allowDelete) {
+async function appendPostImages(postId, targetContainer, allowDelete, beforeNode) {
     try {
         const response = await fetch(`/post-images-data?postId=${encodeURIComponent(postId)}`, { cache: 'no-store' });
 
@@ -251,6 +250,11 @@ async function appendPostImages(postId, targetContainer, allowDelete) {
             }
 
             imageWrap.appendChild(imageItem);
+        }
+
+        if (beforeNode) {
+            targetContainer.insertBefore(imageWrap, beforeNode);
+            return;
         }
 
         targetContainer.appendChild(imageWrap);

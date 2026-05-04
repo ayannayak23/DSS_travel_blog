@@ -13,10 +13,12 @@ body {
 
 header{
     background-color:rgb(87, 157, 189);
-    padding: 10px 30px;
+    padding: 16px 30px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
     min-height: 100px;
     width: 100%;
     box-sizing: border-box;
@@ -26,27 +28,19 @@ header{
     display: flex;
     align-items: center;
     gap: 12px;
+    flex-shrink: 0;
+}
+
+.site-header-left a {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
 }
 
 .logo {
-    width: 75px;
-    height: 75px;
-    float: left;
-}
-
-#login_link {
-    color: black;
-    background-color: rgb(87, 157, 189);
-    padding: 7px;
-    min-width: 100px;
-    border-radius: 3px;
-    border: 2px solid rgb(87, 157, 189);
-    text-transform: uppercase;
-    font-weight: bold;
-    float: left;
-    text-align: center;
-    margin: 30px 10px;
-    transition: background 300ms ease-in-out;
+    width: 72px;
+    height: 72px;
+    display: block;
 }
 
 .link_btn {
@@ -79,28 +73,58 @@ header{
 .site-nav-list {
     list-style: none;
     display: flex;
-    gap: 0px;
+    align-items: center;
+    gap: 8px;
     margin: 0;
     padding: 0;
+    flex-wrap: wrap;
 }
 
-.site-nav-link {
+.site-nav-list li {
+    display: flex;
+}
+
+.site-nav-link,
+.site-user-link,
+.site-user-button {
     color: #333;
     text-decoration: none;
-    font-size: 1em;
+    font-size: 1.05rem;
     transition: color 0.2s;
-    padding: 10px;
-    margin: 7px;
+    padding: 10px 14px;
+    margin: 0;
     border-radius: 8px;
-    font-size: larger;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
 }
 
-.site-nav-link:hover {
+.site-user-button {
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
+    text-transform: none;
+    min-width: 90px;
+}
+
+.site-user-link {
+    text-transform: uppercase;
+    min-width: 90px;
+}
+
+.site-nav-link:hover,
+.site-user-link:hover,
+.site-user-button:hover,
+.site-user-menu.is-open .site-user-button {
     color: #fff;
     background-color: #206ec9;
 }
 
-.site-nav-link.active {
+.site-nav-link.active,
+.site-user-link.active {
     font-weight: bold;
     color: #fff;
     background-color: #12407c;
@@ -119,6 +143,8 @@ header{
     border: black solid 1px;
     border-radius: 5px;
     margin-top: 10px;
+    cursor: pointer;
+    padding: 6px 10px;
     transition: background 300ms ease-in-out;
 }
 
@@ -151,6 +177,8 @@ input {
 
 .auth-tab {
     min-width: 120px;
+    padding: 8px 16px;
+    border: 1px solid #d0d7de;
 }
 
 .auth-tab.active {
@@ -160,6 +188,7 @@ input {
 
 .auth-panel {
     max-width: 520px;
+    margin: auto;
 }
 
 .auth-panel form {
@@ -167,14 +196,193 @@ input {
     padding: 0 24px 18px;
 }
 
-.auth-panel input {
+.auth0-entry {
+    padding-top: 0px;
+    max-width: 520px;
+    margin: 0 auto 18px;
+    text-align: center;
+}
+
+.auth0-title {
+    margin: 0 0 8px;
+    font-weight: bold;
+}
+
+.auth0-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.auth0-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    min-width: 240px;
+    padding: 12px 16px;
+    border: 1px solid #d0d7de;
+    border-radius: 12px;
+    text-decoration: none;
+    color: #1f2328;
+    background-color: #fff;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(18, 64, 124, 0.08);
+    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.auth0-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(18, 64, 124, 0.14);
+}
+
+.auth0-button:focus-visible {
+    outline: 3px solid rgba(18, 64, 124, 0.3);
+    outline-offset: 2px;
+}
+
+.auth0-button-icon {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.auth0-button-icon svg {
     width: 100%;
-    box-sizing: border-box;
-    margin-bottom: 10px;
+    height: 100%;
+    display: block;
+}
+
+.auth0-button-text {
+    white-space: nowrap;
+}
+
+.auth0-google {
+    border-color: #dadce0;
+    color: #1f1f1f;
+    background-color: #fff;
+}
+
+.auth0-google:hover {
+    background-color: #f8fbff;
+    border-color: #b9c8dc;
+    color: #1f1f1f;
+}
+
+.auth0-github {
+    border-color: #24292f;
+    color: #fff;
+    background-color: #24292f;
+}
+
+.auth0-github:hover {
+    background-color: #1b1f23;
+    border-color: #1b1f23;
+    color: #fff;
+}
+
+.auth0-divider {
+    margin: 20px auto;
+    text-align: center;
+    font-size: 0.95em;
+}
+
+@media (max-width: 560px) {
+    .auth0-buttons {
+        align-items: stretch;
+    }
+
+    .auth0-button {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+.site-nav{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
+.site-user-actions {
+    display: flex;
+    align-items: center;
+}
+
+.site-user-menu {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.site-user-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    display: none;
+    min-width: 140px;
+    padding: 8px;
+    background-color: #fff;
+    border: 1px solid #c7d4e2;
+    border-radius: 10px;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+    z-index: 20;
+}
+
+.site-user-menu.is-open .site-user-dropdown {
+    display: block;
+}
+
+.site-user-dropdown-link {
+    display: block;
+    color: #222;
+    text-decoration: none;
+    font-weight: 600;
+    padding: 10px 12px;
+    border-radius: 8px;
+}
+
+.site-user-dropdown-link:hover {
+    background-color: #e8f1fb;
+}
+
+@media (max-width: 760px) {
+    header {
+        padding: 16px 20px;
+    }
+
+    .site-nav {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .site-nav-list {
+        gap: 4px;
+    }
+
+    .site-nav-link,
+    .site-user-link,
+    .site-user-button {
+        padding: 8px 12px;
+        font-size: 1rem;
+    }
+}
+
+.auth-panel input {
+    width: 95%;
+    margin-bottom: 15px;
+    padding: 10px;
+    border: 1px solid #c7d4e2;
+    border-radius: 7px;
 }
 
 .form-message {
-    min-height: 24px;
     margin: 8px 0;
 }
 
@@ -225,70 +433,6 @@ section{
     border-radius: 10px;
     margin: 5px;
     text-align: center;
-}
-
-.user_menu {
-    overflow: hidden;
-    background-color: #333;
-    font-family: Arial;
-}
-
-.user_menu a {
-    float: left;
-    font-size: 16px;
-    color: white;
-    text-align: center;
-    padding: 14px 16px;
-    text-decoration: none;
-}
-    
-.dropdown {
-    float: right;
-    margin: 30px 10px;
-    overflow: hidden;
-}
-    
-.dropdown #login_link {
-    padding: 14px 16px;
-    font-family: inherit;
-    margin: 0;
-}
-    
-.user_menu a:hover, .dropdown:hover #login_link {
-    background-color: rgb(87, 157, 189);
-}
-
-.dropdown-content {
-    display: none;
-    position: absolute;
-    top: 80px;
-    right: 20px;
-    background-color: #f9f9f9;
-    min-width: 150px;
-    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-    z-index: 1;
-}
-    
-.dropdown-content a {
-    float: none;
-    color: black;
-    padding: 12px 16px;
-    text-decoration: none;
-    display: block;
-    text-align: left;
-}
-    
-.dropdown-content a:hover {
-    background-color: #ddd;
-}
-    
-.dropdown:hover .dropdown-content {
-    display: block;
-}
-
-.dropdown-active {
-    font-weight: bold;
-    background-color:lightgray;
 }
 
 /*************** POST STYLING ***************/

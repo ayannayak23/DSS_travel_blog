@@ -48,13 +48,12 @@ async function loadPosts() {
         timeContainer.textContent = timestamp;
         figcap.appendChild(timeContainer);
 
-        await appendPostImages(postId, figcap);
-
         let contentContainer = document.createElement('p');
         contentContainer.textContent = content;
         figcap.appendChild(contentContainer);
 
         postList.insertBefore(postContainer, document.querySelectorAll("article")[0]);
+        appendPostImages(postId, figcap, contentContainer);
     }
 }
 
@@ -102,7 +101,7 @@ if(document.getElementById("search")) {
 }
 
 // Load and render images for a single post
-async function appendPostImages(postId, targetContainer) {
+async function appendPostImages(postId, targetContainer, beforeNode) {
     try {
         const response = await fetch(`/post-images-data?postId=${encodeURIComponent(postId)}`, { cache: 'no-store' });
 
@@ -130,6 +129,11 @@ async function appendPostImages(postId, targetContainer) {
             imageItem.appendChild(imageTag);
 
             imageWrap.appendChild(imageItem);
+        }
+
+        if (beforeNode) {
+            targetContainer.insertBefore(imageWrap, beforeNode);
+            return;
         }
 
         targetContainer.appendChild(imageWrap);
