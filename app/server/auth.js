@@ -366,7 +366,7 @@ function createAuthModule({ pool, loginState }) {
         };
     }
 
-    function registerRoutes(app, { isValidSessionId, deactivateSessionById }) {
+    function registerRoutes(app, { isValidSessionId, deactivateSessionById }, { validateCsrfToken }) {
         app.get('/auth/status', (req, res) => {
             res.json({
                 isLoggedIn: isOidcAuthenticated(req),
@@ -419,8 +419,9 @@ function createAuthModule({ pool, loginState }) {
             res.json({ siteKey: ENV.recaptchaSiteKey });
         });
 
-        app.post('/', handleLocalLogin);
-        app.post('/signup', handleSignup);
+        // Both login and sign-up must include a valid CSRF token.
+        app.post('/', validateCsrfToken, handleLocalLogin);
+        app.post('/signup', validateCsrfToken, handleSignup);
     }
 
     return {

@@ -1,3 +1,16 @@
+function getCookieValue(name) {
+    const cookies = document.cookie ? document.cookie.split('; ') : [];
+
+    for (const cookie of cookies) {
+        const parts = cookie.split('=');
+        if (parts[0] === name) {
+            return decodeURIComponent(parts.slice(1).join('='));
+        }
+    }
+
+    return '';
+}
+
 // Function to load posts made by user who is currently logged in
 async function loadPosts() {
 
@@ -90,7 +103,8 @@ function deletePost(e) {
     };
 
     const requestHeaders = {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-CSRF-Token": getCookieValue('csrf_token')
     };
 
     // Delete post
@@ -166,8 +180,13 @@ if (postForm) {
 
         try {
             const formData = new FormData(postForm);
+            // Send the same token in the form body for the server-side CSRF check.
+            formData.append('csrf_token', getCookieValue('csrf_token'));
             const response = await fetch('/makepost', {
                 method: 'POST',
+                headers: {
+                    'X-CSRF-Token': getCookieValue('csrf_token')
+                },
                 body: formData
             });
 
@@ -275,7 +294,9 @@ async function deleteImage(e) {
         const response = await fetch('/deleteimage', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                // Send the token in a header for JSON requests.
+                'X-CSRF-Token': getCookieValue('csrf_token')
             },
             body: JSON.stringify({ imageId })
         });

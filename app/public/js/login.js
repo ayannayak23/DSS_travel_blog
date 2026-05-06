@@ -6,6 +6,34 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const displayNamePattern = /^[A-Za-z0-9_]{3,20}$/;
 const specialCharacterPattern = /[!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\;/']/;
 
+function getCookieValue(name) {
+    const cookies = document.cookie ? document.cookie.split('; ') : [];
+
+    for (const cookie of cookies) {
+        const parts = cookie.split('=');
+        if (parts[0] === name) {
+            return decodeURIComponent(parts.slice(1).join('='));
+        }
+    }
+
+    return '';
+}
+
+function fillCsrfFields() {
+    const csrfToken = getCookieValue('csrf_token');
+    const loginTokenField = document.getElementById('login_csrf_token');
+    const signupTokenField = document.getElementById('signup_csrf_token');
+
+    // Put the token into both forms so the server can compare it with the cookie.
+    if (loginTokenField) {
+        loginTokenField.value = csrfToken;
+    }
+
+    if (signupTokenField) {
+        signupTokenField.value = csrfToken;
+    }
+}
+
 // Callback used by the reCAPTCHA API script in login.html
 window.onRecaptchaLoaded = function() {
     isRecaptchaApiLoaded = true;
@@ -171,6 +199,7 @@ async function checkLoginAttempts() {
         empty: 'Please fill out the login fields.',
         captcha_required: 'Please complete the reCAPTCHA check.',
         captcha_failed: 'reCAPTCHA verification failed. Please try again.',
+        csrf_invalid: 'Please refresh the page and try again.',
         invalid: 'Invalid email or password.',
         server_error: 'Login service unavailable. Please try again later.'
     };
@@ -216,5 +245,6 @@ function setupAuthUi() {
 }
 
 setupAuthUi();
+fillCsrfFields();
 setupRecaptcha();
 checkLoginAttempts();

@@ -60,7 +60,7 @@ function getCurrentDisplayTimestamp() {
     return new Date().toLocaleString('en-GB');
 }
 
-function registerPostRoutes(app, { pool, validateSession }) {
+function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
     app.get('/posts-data', async (req, res) => {
         try {
             const postsResult = await pool.query(`
@@ -166,7 +166,8 @@ function registerPostRoutes(app, { pool, validateSession }) {
         }
     });
 
-    app.post('/makepost', validateSession, upload.array('image_files', LIMITS.maxImagesPerPost), async (req, res) => {
+    // State-changing post routes also check the CSRF token before doing any work.
+    app.post('/makepost', validateSession, validateCsrfToken, upload.array('image_files', LIMITS.maxImagesPerPost), async (req, res) => {
         try {
             const submittedPostId = getSafeString(req.body.postId).trim();
             const parsedPostId = parsePostId(submittedPostId);
@@ -234,7 +235,7 @@ function registerPostRoutes(app, { pool, validateSession }) {
         }
     });
 
-    app.post('/deletepost', validateSession, async (req, res) => {
+    app.post('/deletepost', validateSession, validateCsrfToken, async (req, res) => {
         try {
             const postId = parsePostId(getSafeString(req.body.postId).trim());
             if (postId === null) {
@@ -249,7 +250,7 @@ function registerPostRoutes(app, { pool, validateSession }) {
         }
     });
 
-    app.post('/deleteimage', validateSession, async (req, res) => {
+    app.post('/deleteimage', validateSession, validateCsrfToken, async (req, res) => {
         try {
             const imageId = Number.parseInt(getSafeString(req.body.imageId).trim(), 10);
             if (!Number.isFinite(imageId)) {
