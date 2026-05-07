@@ -3,3 +3,4 @@ instructions.txt
 agent_feedback.md
 test/password_hashing.test.js
 test/database_encryption.test.js
+.claude
