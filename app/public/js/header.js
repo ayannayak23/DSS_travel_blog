@@ -115,23 +115,36 @@ function renderHeader(activePage) {
     const headerLeft = document.createElement('div');
     headerLeft.className = 'site-header-left';
 
-    const logoLink = document.createElement('a');
-    logoLink.href = PAGE_PATHS.home;
     const logo = document.createElement('img');
     logo.src = '../imgs/logo.png';
     logo.alt = 'Traveller 21 logo';
     logo.className = 'logo';
-    logoLink.appendChild(logo);
 
-    const titleLink = document.createElement('a');
-    titleLink.href = PAGE_PATHS.home;
     const title = document.createElement('span');
     title.className = 'site-title';
     title.textContent = 'Traveller 21';
-    titleLink.appendChild(title);
 
-    headerLeft.appendChild(logoLink);
-    headerLeft.appendChild(titleLink);
+    if (activePage === 'login') {
+        headerLeft.appendChild(logo);
+        headerLeft.appendChild(title);
+    } else {
+        const logoLink = document.createElement('a');
+        logoLink.href = PAGE_PATHS.home;
+        logoLink.appendChild(logo);
+
+        const titleLink = document.createElement('a');
+        titleLink.href = PAGE_PATHS.home;
+        titleLink.appendChild(title);
+
+        headerLeft.appendChild(logoLink);
+        headerLeft.appendChild(titleLink);
+    }
+
+    if (activePage === 'login') {
+        header.appendChild(headerLeft);
+        headerMount.replaceChildren(header);
+        return;
+    }
 
     const nav = document.createElement('nav');
     nav.className = 'site-nav';

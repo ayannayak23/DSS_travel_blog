@@ -3,6 +3,12 @@ async function loadLatestPosts() {
 
     // Load posts data
     const post_response = await fetch("/posts-data", { cache: 'no-store' });
+
+    if (post_response.status === 401) {
+        window.location.href = '/';
+        return;
+    }
+
     const post_data = await post_response.json();
 
     // Remove current posts from page
@@ -52,8 +58,57 @@ async function loadLatestPosts() {
         contentContainer.textContent = content;
         figcap.appendChild(contentContainer);
 
+        appendPostImages(postId, figcap, contentContainer);
+
         postList.insertBefore(postContainer, postList.querySelectorAll("section > p")[1]);
     }
 }
 
 loadLatestPosts();
+
+// Load and render images for a single post
+async function appendPostImages(postId, targetContainer, beforeNode) {
+    try {
+        const response = await fetch(`/post-images-data?postId=${encodeURIComponent(postId)}`, { cache: 'no-store' });
+
+        if (response.status === 401) {
+            window.location.href = '/';
+            return;
+        }
+
+        if (!response.ok) {
+            return;
+        }
+
+        const images = await response.json();
+
+        if (!Array.isArray(images) || images.length === 0) {
+            return;
+        }
+
+        const imageWrap = document.createElement('div');
+        imageWrap.classList.add('post-images');
+
+        for (const image of images) {
+            const imageItem = document.createElement('div');
+            imageItem.classList.add('post-image-item');
+
+            const imageTag = document.createElement('img');
+            imageTag.classList.add('post-image');
+            imageTag.src = `/post-images/${image.imageId}`;
+            imageTag.alt = 'Post image';
+            imageItem.appendChild(imageTag);
+
+            imageWrap.appendChild(imageItem);
+        }
+
+        if (beforeNode) {
+            targetContainer.insertBefore(imageWrap, beforeNode);
+            return;
+        }
+
+        targetContainer.appendChild(imageWrap);
+    } catch (error) {
+        console.error('Failed to load post images:', error);
+    }
+}

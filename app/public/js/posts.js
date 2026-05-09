@@ -3,6 +3,12 @@ async function loadPosts() {
 
     // Load posts data
     const post_response = await fetch("/posts-data", { cache: 'no-store' });
+
+    if (post_response.status === 401) {
+        window.location.href = '/';
+        return;
+    }
+
     const post_data = await post_response.json();
 
     let postList = document.getElementById('postsList');

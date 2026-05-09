@@ -61,7 +61,7 @@ function getCurrentDisplayTimestamp() {
 }
 
 function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
-    app.get('/posts-data', async (req, res) => {
+    app.get('/posts-data', validateSession, async (req, res) => {
         try {
             const postsResult = await pool.query(`
                 SELECT

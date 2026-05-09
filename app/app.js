@@ -23,7 +23,27 @@ assertRequiredConfig();
 const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 30,
-    message: { error: 'Too many requests please try again later' }
+    message: { error: 'Too many requests please try again later' },
+    skip: (req) => {
+        const path = req.path || '';
+
+        if (path.startsWith('/css/') || path.startsWith('/js/') || path.startsWith('/imgs/')) {
+            return true;
+        }
+
+        if (path.startsWith('/post-images') || path === '/ping') {
+            return true;
+        }
+
+        return false;
+    }
+});
+
+// Rate limit for image requests since they are more resource intensive to serve, 600 requests per 15 minutes per IP
+const imageLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 600,
+    message: { error: 'Too many image requests please try again later' }
 });
 
 //limit just for the login page to stop brute force flooding
@@ -129,6 +149,8 @@ app.disable('x-powered-by');
 //Apply WAF and rate limiter to all routes before anything else runs
 app.use(wafMiddleware);
 app.use(generalLimiter);
+app.use('/post-images', imageLimiter);
+app.use('/post-images-data', imageLimiter);
 
 app.use(auth(authModule.createAuth0Config()));
 app.use(createSecurityHeadersMiddleware());
@@ -138,6 +160,13 @@ app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 app.use(setCsrfToken);
+app.use('/html', (req, res, next) => {
+    if (req.path === '/login.html') {
+        return next();
+    }
+
+    return sessionTools.validateSession(req, res, next);
+});
 app.use(express.static(PATHS.publicDir));
 
 //Apply stricter rate limit to login and signup before the routes are registered

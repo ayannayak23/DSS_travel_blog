@@ -173,6 +173,102 @@ function searchPosts() {
 document.getElementById("search").addEventListener("keyup", searchPosts);
 
 const postForm = document.getElementById('postForm');
+const imageInput = document.getElementById('image_files');
+const selectedImagesContainer = document.getElementById('selected_images');
+const selectedImages = [];
+const MAX_SELECTED_IMAGES = 5;
+const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+function getFileKey(file) {
+    return `${file.name}|${file.size}|${file.lastModified}`;
+}
+
+function clearSelectedImages() {
+    selectedImages.length = 0;
+    renderSelectedImages();
+}
+
+function renderSelectedImages() {
+    if (!selectedImagesContainer) {
+        return;
+    }
+
+    selectedImagesContainer.replaceChildren();
+
+    for (const entry of selectedImages) {
+        const item = document.createElement('div');
+        item.classList.add('selected-image-item');
+
+        const name = document.createElement('div');
+        name.classList.add('selected-image-name');
+        name.textContent = entry.file.name;
+        item.appendChild(name);
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.classList.add('selected-image-remove');
+        removeButton.textContent = 'Remove';
+        removeButton.addEventListener('click', () => {
+            const index = selectedImages.findIndex((img) => img.key === entry.key);
+            if (index !== -1) {
+                selectedImages.splice(index, 1);
+                renderSelectedImages();
+            }
+        });
+        item.appendChild(removeButton);
+
+        selectedImagesContainer.appendChild(item);
+    }
+}
+
+function addSelectedFiles(fileList) {
+    let hadError = false;
+
+    for (const file of fileList) {
+        if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+            hadError = true;
+            showPostError('Only PNG, JPG, or WEBP images are allowed.');
+            continue;
+        }
+
+        if (file.size > MAX_IMAGE_SIZE_BYTES) {
+            hadError = true;
+            showPostError('Each image must be 2MB or smaller.');
+            continue;
+        }
+
+        if (selectedImages.length >= MAX_SELECTED_IMAGES) {
+            hadError = true;
+            showPostError(`You can select up to ${MAX_SELECTED_IMAGES} images.`);
+            break;
+        }
+
+        const key = getFileKey(file);
+        if (selectedImages.some((img) => img.key === key)) {
+            continue;
+        }
+
+        selectedImages.push({
+            key,
+            file
+        });
+    }
+
+    if (!hadError) {
+        clearPostError();
+    }
+
+    renderSelectedImages();
+}
+
+if (imageInput) {
+    imageInput.addEventListener('change', (event) => {
+        addSelectedFiles(event.target.files || []);
+        imageInput.value = '';
+    });
+}
+
 if (postForm) {
     postForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -180,6 +276,11 @@ if (postForm) {
 
         try {
             const formData = new FormData(postForm);
+            formData.delete('image_files');
+
+            for (const entry of selectedImages) {
+                formData.append('image_files', entry.file);
+            }
             // Send the same token in the form body for the server-side CSRF check.
             formData.append('csrf_token', getCookieValue('csrf_token'));
             const response = await fetch('/makepost', {
@@ -202,6 +303,7 @@ if (postForm) {
             }
 
             postForm.reset();
+            clearSelectedImages();
             const postIdField = document.getElementById('postId');
             if (postIdField) {
                 postIdField.value = '';

@@ -486,6 +486,45 @@ section{
     background-color: #c9302c;
 }
 
+.selected-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.selected-image-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: space-between;
+    padding: 8px;
+    border: 1px solid #c7d4e2;
+    border-radius: 8px;
+    background-color: #f8fbff;
+}
+
+.selected-image-name {
+    font-size: 12px;
+    max-width: 120px;
+    word-break: break-word;
+    flex: 1;
+}
+
+.selected-image-remove {
+    background-color: #d9534f;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.selected-image-remove:hover {
+    background-color: #c9302c;
+}
+
 .search_bar {
     width: 70%;
     height: 30px;

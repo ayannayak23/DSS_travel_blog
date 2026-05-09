@@ -17,7 +17,7 @@ function createSessionTools({ pool, getOidcUsername }) {
     function handleSessionFailure(req, res) {
         res.clearCookie('session_id');
 
-        if (req.path === '/ping' || req.path === '/post-images-data' || req.path === '/my-posts-data') {
+        if (req.path === '/ping' || req.path === '/post-images-data' || req.path === '/my-posts-data' || req.path === '/posts-data') {
             return res.status(401).json({ status: 'session_invalid' });
         }
 
