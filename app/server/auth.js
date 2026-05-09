@@ -282,6 +282,20 @@ function createAuthModule({ pool, loginState }) {
             return res.redirect('/?mode=signup&signup=' + encodeURIComponent(validation.code || 'invalid'));
         }
 
+        const recaptchaToken = getSafeString(req.body['g-recaptcha-response']);
+        if (recaptchaToken === '') {
+            return res.redirect('/?mode=signup&signup=captcha_required');
+        }
+
+        if (!isWithinMaxLength(recaptchaToken, LIMITS.maxRecaptchaTokenLength)) {
+            return res.redirect('/?mode=signup&signup=captcha_failed');
+        }
+
+        const recaptchaVerified = await verifyRecaptchaToken(recaptchaToken, getRequestIp(req));
+        if (!recaptchaVerified) {
+            return res.redirect('/?mode=signup&signup=captcha_failed');
+        }
+
         try {
             const duplicateUserResult = await pool.query(
                 'SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',

@@ -1,6 +1,7 @@
 let recaptchaSiteKey = null;
 let isRecaptchaApiLoaded = false;
-let isRecaptchaRendered = false;
+let loginRecaptchaId = null;
+let signupRecaptchaId = null;
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const displayNamePattern = /^[A-Za-z0-9_]{3,20}$/;
@@ -41,19 +42,29 @@ window.onRecaptchaLoaded = function() {
 };
 
 function renderRecaptchaIfReady() {
-    // Render only once script and site key are ready
-    if (!isRecaptchaApiLoaded || !recaptchaSiteKey || isRecaptchaRendered) {
+    if (!isRecaptchaApiLoaded || !recaptchaSiteKey) {
         return;
     }
 
-    if (typeof grecaptcha === 'undefined') {
+    if (typeof grecaptcha === 'undefined' || typeof grecaptcha.render !== 'function') {
         return;
     }
 
-    grecaptcha.render('recaptcha_container', {
-        sitekey: recaptchaSiteKey
-    });
-    isRecaptchaRendered = true;
+    const loginPanel = document.getElementById('login_panel');
+    const loginContainer = document.getElementById('recaptcha_container');
+    if (loginRecaptchaId === null && loginContainer && loginPanel && !loginPanel.hidden) {
+        loginRecaptchaId = grecaptcha.render(loginContainer, {
+            sitekey: recaptchaSiteKey
+        });
+    }
+
+    const signupPanel = document.getElementById('signup_panel');
+    const signupContainer = document.getElementById('recaptcha_signup_container');
+    if (signupRecaptchaId === null && signupContainer && signupPanel && !signupPanel.hidden) {
+        signupRecaptchaId = grecaptcha.render(signupContainer, {
+            sitekey: recaptchaSiteKey
+        });
+    }
 }
 
 async function setupRecaptcha() {
@@ -154,6 +165,8 @@ function setAuthMode(mode) {
     signupTab.classList.toggle('active', isSignup);
     loginTab.setAttribute('aria-selected', String(!isSignup));
     signupTab.setAttribute('aria-selected', String(isSignup));
+
+    renderRecaptchaIfReady();
 }
 
 function showSignupRedirectMessage() {
@@ -168,6 +181,8 @@ function showSignupRedirectMessage() {
         invalid_email: ['Please enter a valid email address.', 'error'],
         weak_password: ['Password must satisfy all listed rules.', 'error'],
         password_mismatch: ['Passwords do not match.', 'error'],
+        captcha_required: ['Please complete the reCAPTCHA check.', 'error'],
+        captcha_failed: ['reCAPTCHA verification failed. Please try again.', 'error'],
         duplicate: ['An account with that email already exists.', 'error'],
         duplicate_username: ['That username is already taken.', 'error'],
         server_error: ['Sign-up is unavailable. Please try again later.', 'error']
