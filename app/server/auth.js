@@ -1,3 +1,7 @@
+/**
+ * Registers local authentication, sign-up, OAuth handoff, and current-user routes.
+ * Password work is delegated to security helpers, and database access uses parameterised queries.
+ */
 const crypto = require('crypto');
 const { hashPassword, verifyPassword } = require('../security/passwordHashing');
 const { normalizeEmail, validateSignupInput } = require('../security/signupValidation');
@@ -17,7 +21,9 @@ const {
     sendPage
 } = require('./utils');
 
+// Factory keeps auth behaviour tied to the shared database pool and login-state store.
 function createAuthModule({ pool, loginState }) {
+    // express-openid-connect exposes auth status through req.oidc when OAuth is configured.
     function isOidcAuthenticated(req) {
         return Boolean(req.oidc && typeof req.oidc.isAuthenticated === 'function' && req.oidc.isAuthenticated());
     }
@@ -30,6 +36,7 @@ function createAuthModule({ pool, loginState }) {
         return sendPage(res, PATHS.indexPage);
     }
 
+    // Prefer stable account identifiers from OAuth providers, with email first when available.
     function getOidcUsername(oidcUser) {
         if (!oidcUser) {
             return '';
@@ -42,6 +49,7 @@ function createAuthModule({ pool, loginState }) {
             getSafeString(oidcUser.sub);
     }
 
+    // Resolve the public display name separately from the internal login identifier.
     async function getDisplayNameForUser(username) {
         if (!username) {
             return '';
@@ -59,6 +67,7 @@ function createAuthModule({ pool, loginState }) {
         }
     }
 
+    // Keep OAuth-derived display names within the same character rules as local sign-up.
     function sanitizeDisplayName(value) {
         const safe = getSafeString(value)
             .trim()
@@ -72,6 +81,7 @@ function createAuthModule({ pool, loginState }) {
         return safe.slice(0, 20);
     }
 
+    // Choose a safe public name from provider profile fields, falling back to a random value.
     function deriveDisplayNameFromOidc(oidcUser) {
         if (!oidcUser) {
             return `user_${crypto.randomBytes(3).toString('hex')}`.slice(0, 20);
@@ -94,6 +104,7 @@ function createAuthModule({ pool, loginState }) {
         return `user_${crypto.randomBytes(3).toString('hex')}`.slice(0, 20);
     }
 
+    // Add a suffix when a generated or submitted display name is already taken.
     async function makeUniqueDisplayName(baseName, excludedUsername = '') {
         const excludedUsernameLower = getSafeString(excludedUsername).toLowerCase();
         let candidate = baseName.slice(0, 20);
@@ -116,6 +127,7 @@ function createAuthModule({ pool, loginState }) {
         }
     }
 
+    // Mirror OAuth users into the local users table so posts and sessions use one user model.
     async function ensureOauthUser(oidcUser) {
         const username = getOidcUsername(oidcUser);
 
@@ -153,6 +165,7 @@ function createAuthModule({ pool, loginState }) {
         );
     }
 
+    // Verify the browser's reCAPTCHA token server-side before accepting login or sign-up.
     async function verifyRecaptchaToken(token, remoteIp) {
         try {
             const body = new URLSearchParams();
@@ -183,12 +196,14 @@ function createAuthModule({ pool, loginState }) {
         }
     }
 
+    // Centralise failed local-login handling so state and page rendering stay consistent.
     function failLogin(status, res) {
         loginState.clearCurrentUser();
         loginState.setLoginStatus(status);
         return sendLoginPage(res);
     }
 
+    // Invalidate older sessions for the same local user before issuing a fresh session cookie.
     async function clearExistingSessions(username) {
         try {
             await pool.query(
@@ -200,6 +215,7 @@ function createAuthModule({ pool, loginState }) {
         }
     }
 
+    // Validate local credentials, captcha, and session creation for email/password login.
     async function handleLocalLogin(req, res) {
         const usernameInput = getSafeString(req.body.username_input).trim();
         const username = usernameInput.includes('@') ? normalizeEmail(usernameInput) : usernameInput;
@@ -231,6 +247,7 @@ function createAuthModule({ pool, loginState }) {
         }
 
         try {
+            // users.password stores a bcrypt hash, not the plaintext password.
             const userResult = await pool.query(
                 'SELECT username, password FROM users WHERE username = $1 LIMIT 1',
                 [username]
@@ -250,6 +267,7 @@ function createAuthModule({ pool, loginState }) {
             const sessionId = crypto.randomBytes(32).toString('hex');
 
             try {
+                // Store the new session server-side and send only the random session ID in the cookie.
                 await pool.query(
                     `INSERT INTO sessions (session_id, username, ip_address, user_agent, is_active)
                      VALUES ($1, $2, $3, $4, true)`,
@@ -270,6 +288,7 @@ function createAuthModule({ pool, loginState }) {
         }
     }
 
+    // Validate sign-up input and create a local account with a hashed password.
     async function handleSignup(req, res) {
         const validation = validateSignupInput(
             getSafeString(req.body.signup_username_input),
@@ -297,6 +316,7 @@ function createAuthModule({ pool, loginState }) {
         }
 
         try {
+            // Email/login identifier and display name must both stay unique.
             const duplicateUserResult = await pool.query(
                 'SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
                 [validation.email]
@@ -315,6 +335,7 @@ function createAuthModule({ pool, loginState }) {
                 return res.redirect('/?mode=signup&signup=duplicate_username');
             }
 
+            // hashPassword handles bcrypt salting and any configured server-side peppering.
             const passwordHash = await hashPassword(getSafeString(req.body.signup_password_input));
             await pool.query(
                 'INSERT INTO users (username, display_name, password) VALUES ($1, $2, $3)',
@@ -332,6 +353,7 @@ function createAuthModule({ pool, loginState }) {
         }
     }
 
+    // Start a provider-specific OAuth login unless the current request is already authenticated.
     function createOauthLoginHandler(connection) {
         return (req, res) => {
             if (isOidcAuthenticated(req)) {
@@ -345,6 +367,7 @@ function createAuthModule({ pool, loginState }) {
         };
     }
 
+    // Build the browser-facing current-user response without exposing password data.
     async function buildCurrentUserResponse(req) {
         const oidcUser = isOidcAuthenticated(req) ? req.oidc.user : null;
         const username = oidcUser ? getOidcUsername(oidcUser) : (loginState.getCurrentUser() || '');
@@ -365,6 +388,7 @@ function createAuthModule({ pool, loginState }) {
         };
     }
 
+    // Configure express-openid-connect while keeping provider secrets in environment config.
     function createAuth0Config() {
         return {
             authRequired: false,
@@ -380,6 +404,7 @@ function createAuthModule({ pool, loginState }) {
         };
     }
 
+    // Register all authentication routes in one place so app.js only wires middleware and modules.
     function registerRoutes(app, { isValidSessionId, deactivateSessionById }, { validateCsrfToken }) {
         app.get('/auth/status', (req, res) => {
             res.json({
@@ -411,6 +436,7 @@ function createAuthModule({ pool, loginState }) {
         app.get('/app-logout', async (req, res) => {
             const sessionId = req.cookies.session_id;
 
+            // Deactivate the local session before clearing the browser cookie.
             if (sessionId && isValidSessionId(sessionId)) {
                 try {
                     await deactivateSessionById(sessionId);
@@ -422,6 +448,7 @@ function createAuthModule({ pool, loginState }) {
             res.clearCookie('session_id');
             loginState.reset();
 
+            // OAuth users must also be logged out at the provider session layer.
             if (isOidcAuthenticated(req)) {
                 return res.oidc.logout({ returnTo: ENV.auth0BaseURL || '/' });
             }
