@@ -1,10 +1,10 @@
 /**
- * Verifies database encryption helpers encrypt, decrypt, and reject tampered ciphertext.
+ * To verify database encryption helpers encrypt, decrypt, and reject tampered ciphertext.
  */
 const assert = require('assert');
 
 // Use a fixed test-only key so encryption behaviour can be checked without reading real secrets.
-process.env.DATABASE_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+process.env.DATABASE_ENCRYPTION_KEY = 'd8dacde546e09c4c9963a97d99777c8c4ee81f94a28e854a0281d9608a96426a';
 
 const {
     encryptForDatabase,
@@ -12,7 +12,7 @@ const {
     isEncryptedValue
 } = require('../app/security/databaseEncryption');
 
-// Change one ciphertext character to prove AES-GCM authentication detects tampering.
+// To change one ciphertext character to prove AES-GCM authentication detects tampering.
 function tamperWithLastCharacter(value) {
     const lastCharacter = value[value.length - 1];
     const replacement = lastCharacter === '0' ? '1' : '0';
@@ -23,7 +23,7 @@ const plainText = 'This post body should be encrypted in PostgreSQL.';
 const firstEncrypted = encryptForDatabase(plainText);
 const secondEncrypted = encryptForDatabase(plainText);
 
-// Encrypted database values should not expose plaintext and should decrypt back to the original content.
+// To ensure encrypted database values do not expose plaintext and decrypt back to the original content.
 assert.notStrictEqual(firstEncrypted, plainText);
 assert.strictEqual(decryptFromDatabase(firstEncrypted), plainText);
 
@@ -32,7 +32,7 @@ assert.notStrictEqual(firstEncrypted, secondEncrypted);
 assert.strictEqual(isEncryptedValue(firstEncrypted), true);
 assert.strictEqual(isEncryptedValue(plainText), false);
 
-// Legacy plaintext remains readable, while modified encrypted values fail authentication.
+// To ensure legacy plaintext remains readable, while modified encrypted values fail authentication.
 assert.strictEqual(decryptFromDatabase(plainText), plainText);
 assert.throws(() => decryptFromDatabase(tamperWithLastCharacter(firstEncrypted)));
 
