@@ -1,10 +1,10 @@
 /**
- * To verify the password hashing helper stores peppered bcrypt hashes and validates passwords correctly. peppereing
+ * To verify the password hashing helper stores peppered bcrypt hashes and validates passwords correctly. 
  */
 const assert = require('assert');
 const bcrypt = require('bcryptjs');
 
-process.env.PASSWORD_PEPPER = 'test-only-password-pepper-for-hashing-tests';
+process.env.PASSWORD_PEPPER = 'd8dacde546e09c4c9963a97d99777c8c4ee81f94a28e854a0281d9608a964261';
 
 const {
     hashPassword,
@@ -31,7 +31,7 @@ async function run() {
     assert.strictEqual(await verifyPassword('wrong password', firstHash), false);
     assert.notStrictEqual(firstHash, secondHash);
 
-    // To change the server-side pepper should prevent the same password from verifying.
+    // To change the server side pepper should prevent the same password from verifying.
     process.env.PASSWORD_PEPPER = 'different-test-only-password-pepper';
     assert.strictEqual(await verifyPassword(plainPassword, firstHash), false);
     process.env.PASSWORD_PEPPER = originalPepper;

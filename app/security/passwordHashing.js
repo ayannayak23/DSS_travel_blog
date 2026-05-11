@@ -1,6 +1,6 @@
 /**
- * To provide peppered bcrypt helpers for one-way password hashing and verification.
- * The database stores only bcrypt hashes; the server-side pepper stays in the environment.
+ * To provide peppered bcrypt helpers for one way password hashing and verification.
+ * The database stores only bcrypt hashes; the server side pepper stays in the environment.
  */
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
@@ -8,7 +8,7 @@ const bcrypt = require('bcryptjs');
 const BCRYPT_COST_FACTOR = 12;
 const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$/;
 
-// To accept only bcrypt-formatted stored values before attempting password verification.
+// To accept only bcrypt formatted stored values before attempting password verification.
 function looksLikeBcryptHash(value) {
     return typeof value === 'string' && BCRYPT_HASH_PATTERN.test(value);
 }
@@ -23,7 +23,7 @@ function getPasswordPepper() {
     return pepper;
 }
 
-// HMAC mixes the password with the server-side pepper before bcrypt adds its per-password salt.
+// HMAC mixes the password with the server side pepper before bcrypt adds its per password salt.
 function applyPasswordPepper(plainPassword) {
     return crypto
         .createHmac('sha256', getPasswordPepper())
@@ -31,7 +31,7 @@ function applyPasswordPepper(plainPassword) {
         .digest('hex');
 }
 
-// To hash a submitted password; bcrypt creates and embeds a unique salt inside each hash.
+// To hash a submitted password, bcrypt creates and embeds a unique salt inside each hash.
 async function hashPassword(plainPassword) {
     if (typeof plainPassword !== 'string' || plainPassword.length === 0) {
         throw new Error('Password must be a non-empty string.');

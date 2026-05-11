@@ -1,5 +1,5 @@
 /**
- * To verify server-side sign-up validation matches the login page checklist and display-name rules.
+ * To verify server-side sign up validation matches the login page checklist and display name rules.
  */
 const assert = require('assert');
 const {

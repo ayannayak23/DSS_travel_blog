@@ -1,5 +1,5 @@
 /**
- * To centralises server-side sign-up validation for email, display name, and password rules.
+ * To centralise server side sign-up validation for email, display name, and password rules.
  * Frontend validation improves usability, but this helper enforces the same rules before database writes.
  */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -12,7 +12,7 @@ function normalizeEmail(email) {
     return typeof email === 'string' ? email.trim().toLowerCase() : '';
 }
 
-// To keep display names case-preserving while removing accidental surrounding spaces.
+// To keep display names case preserving while removing accidental surrounding spaces.
 function normalizeDisplayName(displayName) {
     return typeof displayName === 'string' ? displayName.trim() : '';
 }
@@ -30,7 +30,7 @@ function isValidEmail(email) {
         EMAIL_PATTERN.test(normalisedEmail);
 }
 
-// To match the password checklist shown in the sign-up form.
+// To match the password checklist shown in the sign up form.
 function getPasswordRuleStatus(password) {
     const value = typeof password === 'string' ? password : '';
 
@@ -43,13 +43,13 @@ function getPasswordRuleStatus(password) {
     };
 }
 
-// To require every password checklist rule to pass before accepting sign-up.
+// To require every password checklist rule to pass before accepting sign up.
 function isValidPassword(password) {
     const rules = getPasswordRuleStatus(password);
     return Object.values(rules).every(Boolean);
 }
 
-// To return clear validation results that the sign-up route can map to user-facing messages.
+// To return clear validation results that the sign up route can map to user facing messages.
 function validateSignupInput(displayName, email, password, passwordConfirmation) {
     const normalisedDisplayName = normalizeDisplayName(displayName);
     const normalisedEmail = normalizeEmail(email);
@@ -101,7 +101,7 @@ function validateSignupInput(displayName, email, password, passwordConfirmation)
     };
 }
 
-// To centralises server-side sign-up validation for email, display name, and password rules.
+// To centralises server side sign-up validation for email, display name, and password rules.
 module.exports = {
     MAX_EMAIL_LENGTH,
     normalizeEmail,

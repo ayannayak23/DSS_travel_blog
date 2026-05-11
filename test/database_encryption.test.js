@@ -3,7 +3,7 @@
  */
 const assert = require('assert');
 
-// Use a fixed test-only key so encryption behaviour can be checked without reading real secrets.
+// Use a fixed test only key so encryption behaviour can be checked without reading real secrets.
 process.env.DATABASE_ENCRYPTION_KEY = 'd8dacde546e09c4c9963a97d99777c8c4ee81f94a28e854a0281d9608a96426a';
 
 const {

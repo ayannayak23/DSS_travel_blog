@@ -1,5 +1,5 @@
 /**
- * To provides AES-256-GCM helpers for encrypting and decrypting database fields.
+ * To provide AES-256-GCM helpers for encrypting and decrypting database fields.
  * The encryption key is loaded from the environment so it is not stored in source code or PostgreSQL.
  */
 const crypto = require('crypto');
