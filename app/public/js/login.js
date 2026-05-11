@@ -35,12 +35,12 @@ function fillCsrfFields() {
     }
 }
 
-// Callback used by the reCAPTCHA API script in login.html
 window.onRecaptchaLoaded = function() {
     isRecaptchaApiLoaded = true;
     renderRecaptchaIfReady();
 };
 
+// Render the reCAPTCHA widget when the API and site key are ready.
 function renderRecaptchaIfReady() {
     if (!isRecaptchaApiLoaded || !recaptchaSiteKey) {
         return;
@@ -67,6 +67,7 @@ function renderRecaptchaIfReady() {
     }
 }
 
+// Fetch the reCAPTCHA site key from the server and initialize the widget.
 async function setupRecaptcha() {
     try {
         const response = await fetch('/captcha-config', { cache: 'no-store' });
@@ -215,7 +216,7 @@ async function checkLoginAttempts() {
         captcha_required: 'Please complete the reCAPTCHA check.',
         captcha_failed: 'reCAPTCHA verification failed. Please try again.',
         csrf_invalid: 'Please refresh the page and try again.',
-        invalid: 'Invalid email or password.',
+        invalid: 'Invalid email or password.',                              // Generic error message to prevent account enumeration.
         server_error: 'Login service unavailable. Please try again later.'
     };
 

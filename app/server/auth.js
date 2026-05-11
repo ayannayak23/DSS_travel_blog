@@ -196,7 +196,7 @@ function createAuthModule({ pool, loginState }) {
         }
     }
 
-    // Centralise failed local-login handling so state and page rendering stay consistent.
+    // Store a generic login failure to prevent account enumeration.
     function failLogin(status, res) {
         loginState.clearCurrentUser();
         loginState.setLoginStatus(status);
@@ -215,7 +215,7 @@ function createAuthModule({ pool, loginState }) {
         }
     }
 
-    // Validate local credentials, captcha, and session creation for email/password login.
+    // Handle email/password login by validating input, checking reCAPTCHA, and creating a session ID.
     async function handleLocalLogin(req, res) {
         const usernameInput = getSafeString(req.body.username_input).trim();
         const username = usernameInput.includes('@') ? normalizeEmail(usernameInput) : usernameInput;
@@ -232,15 +232,18 @@ function createAuthModule({ pool, loginState }) {
             return failLogin('invalid', res);
         }
 
+        // Enforce reCAPTCHA on every login attempt to mitigate brute-force attacks.
         const recaptchaToken = getSafeString(req.body['g-recaptcha-response']);
         if (recaptchaToken === '') {
             return failLogin('captcha_required', res);
         }
 
+        // reCAPTCHA token format validation.  
         if (!isWithinMaxLength(recaptchaToken, LIMITS.maxRecaptchaTokenLength)) {
             return failLogin('captcha_failed', res);
         }
 
+        // Verify the reCAPTCHA token.
         const recaptchaVerified = await verifyRecaptchaToken(recaptchaToken, getRequestIp(req));
         if (!recaptchaVerified) {
             return failLogin('captcha_failed', res);
@@ -253,6 +256,7 @@ function createAuthModule({ pool, loginState }) {
                 [username]
             );
 
+            // Use the same failure response for both invalid users and passwords to prevent account enumeration.
             if (userResult.rows.length === 0) {
                 return failLogin('invalid', res);
             }
@@ -264,6 +268,7 @@ function createAuthModule({ pool, loginState }) {
 
             await clearExistingSessions(username);
 
+            // Generate a random session ID.
             const sessionId = crypto.randomBytes(32).toString('hex');
 
             try {
@@ -301,15 +306,18 @@ function createAuthModule({ pool, loginState }) {
             return res.redirect('/?mode=signup&signup=' + encodeURIComponent(validation.code || 'invalid'));
         }
 
+        // Enforce reCAPTCHA on sign-up to prevent bot account creation.
         const recaptchaToken = getSafeString(req.body['g-recaptcha-response']);
         if (recaptchaToken === '') {
             return res.redirect('/?mode=signup&signup=captcha_required');
         }
 
+        // Validate reCAPTCHA token format.
         if (!isWithinMaxLength(recaptchaToken, LIMITS.maxRecaptchaTokenLength)) {
             return res.redirect('/?mode=signup&signup=captcha_failed');
         }
 
+        // Verify the reCAPTCHA token.
         const recaptchaVerified = await verifyRecaptchaToken(recaptchaToken, getRequestIp(req));
         if (!recaptchaVerified) {
             return res.redirect('/?mode=signup&signup=captcha_failed');

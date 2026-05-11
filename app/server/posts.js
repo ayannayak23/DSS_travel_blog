@@ -3,12 +3,15 @@ const { decryptFromDatabase, encryptForDatabase } = require('../security/databas
 const { LIMITS, PATTERNS, PATHS, ALLOWED_IMAGE_MIME_TYPES } = require('./config');
 const { getSafeString, isWithinMaxLength, sendPage } = require('./utils');
 
+// Configure safe image uploads with memory storage, file size limits, and MIME type checks.
 const upload = multer({
     storage: multer.memoryStorage(),
+    // Limit the file size and number of files.
     limits: {
         fileSize: LIMITS.maxImageSizeBytes,
         files: LIMITS.maxImagesPerPost
     },
+    // MIME type validation.
     fileFilter: (req, file, cb) => {
         if (ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
             return cb(null, true);
@@ -20,6 +23,7 @@ const upload = multer({
     }
 });
 
+// Validate and parse the post ID from user input, ensuring it is a positive integer within allowed length.
 function parsePostId(postId) {
     if (postId === '') {
         return null;
@@ -51,16 +55,20 @@ function buildPostFromRow(row) {
     };
 }
 
+// Get the next available post ID by finding the current maximum and adding one.
 async function getNextPostId(pool) {
     const result = await pool.query('SELECT COALESCE(MAX(post_id), 0) AS max_id FROM posts');
     return (Number(result.rows[0]?.max_id) || 0) + 1;
 }
 
+// Get the current timestamp for posts.
 function getCurrentDisplayTimestamp() {
     return new Date().toLocaleString('en-GB');
 }
 
+// Register routes related to posts, including fetching, creating, and deleting posts and images.
 function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
+    // Fetch all posts with decrypted content and author display names.
     app.get('/posts-data', validateSession, async (req, res) => {
         try {
             const postsResult = await pool.query(`
@@ -89,6 +97,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
         }
     });
 
+    // Return uploaded image details only for authenticated users.
     app.get('/post-images-data', validateSession, async (req, res) => {
         try {
             const postId = parsePostId(getSafeString(req.query.postId).trim());
@@ -115,6 +124,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
         }
     });
 
+    // Return uploaded images only for authenticated users.
     app.get('/post-images/:imageId', validateSession, async (req, res) => {
         try {
             const imageId = Number.parseInt(String(req.params.imageId || ''), 10);
@@ -144,6 +154,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
         res.json({ status: 'ok', username: req.currentUser });
     });
 
+    // Fetch posts for the current user to display on the "My Posts" page.
     app.get('/my-posts-data', validateSession, async (req, res) => {
         try {
             const postsResult = await pool.query(`
@@ -167,6 +178,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
     });
 
     // State-changing post routes also check the CSRF token before doing any work.
+    // Create or edit a post with optional image uploads, ensuring all input is validated.
     app.post('/makepost', validateSession, validateCsrfToken, upload.array('image_files', LIMITS.maxImagesPerPost), async (req, res) => {
         try {
             const submittedPostId = getSafeString(req.body.postId).trim();
@@ -196,6 +208,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
             );
             const existingImageCount = Number(existingImageCountResult.rows[0]?.count) || 0;
 
+            // Ensure the total number of images (existing + new) does not exceed the allowed limit.
             if (existingImageCount + uploadedFiles.length > LIMITS.maxImagesPerPost) {
                 return res.status(400).send(`You can upload up to ${LIMITS.maxImagesPerPost} images per post.`);
             }
@@ -212,6 +225,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
                 [postId, req.currentUser, getCurrentDisplayTimestamp(), title, encryptForDatabase(content)]
             );
 
+            // Save uploaded images in the database, associating them with the post and maintaining sort order.
             for (let index = 0; index < uploadedFiles.length; index += 1) {
                 const file = uploadedFiles[index];
                 await pool.query(
@@ -235,6 +249,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
         }
     });
 
+    // Delete a post by ID.
     app.post('/deletepost', validateSession, validateCsrfToken, async (req, res) => {
         try {
             const postId = parsePostId(getSafeString(req.body.postId).trim());
@@ -250,6 +265,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
         }
     });
 
+    // Allow users to delete only images from their own posts.
     app.post('/deleteimage', validateSession, validateCsrfToken, async (req, res) => {
         try {
             const imageId = Number.parseInt(getSafeString(req.body.imageId).trim(), 10);
@@ -279,6 +295,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
     });
 }
 
+// Middleware to handle errors from Multer during file uploads, such as exceeding limits or invalid file types.
 function handleUploadError(err, req, res, next) {
     if (err instanceof multer.MulterError) {
         return res.status(400).send('Image upload failed. Please check file size and count.');
