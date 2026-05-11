@@ -1,7 +1,8 @@
 /**
- * TO provides the bcrypt helpers for salted one-way password hashing and verification.
- * The plaintext passwords are never stored, just the bcrypt hashes are saved in the users table.
+ * To provide peppered bcrypt helpers for one-way password hashing and verification.
+ * The database stores only bcrypt hashes; the server-side pepper stays in the environment.
  */
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
 const BCRYPT_COST_FACTOR = 12;
@@ -12,13 +13,31 @@ function looksLikeBcryptHash(value) {
     return typeof value === 'string' && BCRYPT_HASH_PATTERN.test(value);
 }
 
+function getPasswordPepper() {
+    const pepper = process.env.PASSWORD_PEPPER;
+
+    if (typeof pepper !== 'string' || pepper.trim().length === 0) {
+        throw new Error('PASSWORD_PEPPER must be set before hashing or verifying passwords.');
+    }
+
+    return pepper;
+}
+
+// HMAC mixes the password with the server-side pepper before bcrypt adds its per-password salt.
+function applyPasswordPepper(plainPassword) {
+    return crypto
+        .createHmac('sha256', getPasswordPepper())
+        .update(plainPassword, 'utf8')
+        .digest('hex');
+}
+
 // To hash a submitted password; bcrypt creates and embeds a unique salt inside each hash.
 async function hashPassword(plainPassword) {
     if (typeof plainPassword !== 'string' || plainPassword.length === 0) {
         throw new Error('Password must be a non-empty string.');
     }
 
-    return bcrypt.hash(plainPassword, BCRYPT_COST_FACTOR);
+    return bcrypt.hash(applyPasswordPepper(plainPassword), BCRYPT_COST_FACTOR);
 }
 
 // To compare a submitted password with the stored hash without recovering the original password.
@@ -27,14 +46,16 @@ async function verifyPassword(plainPassword, storedHash) {
         return false;
     }
 
+    const pepperedPassword = applyPasswordPepper(plainPassword);
+
     try {
-        return await bcrypt.compare(plainPassword, storedHash);
+        return await bcrypt.compare(pepperedPassword, storedHash);
     } catch {
         // Malformed hashes or bcrypt failures are treated as failed authentication.
         return false;
     }
 }
-// To upgrade the cost factor of existing hashes on login, if the hash was created with a lower cost.
+
 module.exports = {
     BCRYPT_COST_FACTOR,
     hashPassword,
