@@ -1,5 +1,5 @@
 /**
- * Provides AES-256-GCM helpers for encrypting and decrypting database fields.
+ * To provides AES-256-GCM helpers for encrypting and decrypting database fields.
  * The encryption key is loaded from the environment so it is not stored in source code or PostgreSQL.
  */
 const crypto = require('crypto');
@@ -10,7 +10,7 @@ const KEY_PATTERN = /^[a-f0-9]{64}$/i;
 const IV_LENGTH_BYTES = 12;
 const AUTH_TAG_LENGTH_BYTES = 16;
 
-// Load the 256-bit encryption key at runtime and reject malformed keys early.
+// To load the 256-bit encryption key at runtime and reject malformed keys early.
 function getEncryptionKey() {
     const keyHex = process.env.DATABASE_ENCRYPTION_KEY;
 
@@ -21,12 +21,12 @@ function getEncryptionKey() {
     return Buffer.from(keyHex, 'hex');
 }
 
-// Identify values already encrypted by this helper, including migrated post content.
+// To identify values already encrypted by this helper, including migrated post content.
 function isEncryptedValue(value) {
     return typeof value === 'string' && value.startsWith(ENCRYPTION_PREFIX);
 }
 
-// Encrypt one database value with a fresh IV; GCM also creates an auth tag for tamper detection.
+// To encrypt one database value with a fresh IV; GCM also creates an auth tag for tamper detection.
 function encryptForDatabase(plainText) {
     if (plainText === null || plainText === undefined || plainText === '') {
         return plainText ?? null;
@@ -40,7 +40,7 @@ function encryptForDatabase(plainText) {
     ]);
     const authTag = cipher.getAuthTag();
 
-    // Store the prefix, IV, auth tag, and ciphertext together so the server can decrypt later.
+    // To store the prefix, IV, auth tag, and ciphertext together so the server can decrypt later.
     return [
         'enc',
         'v1',
@@ -50,7 +50,7 @@ function encryptForDatabase(plainText) {
     ].join(':');
 }
 
-// Decrypt database content on the server before it is rendered or returned by routes.
+// To decrypt database content on the server before it is rendered or returned by routes.
 function decryptFromDatabase(storedValue) {
     if (storedValue === null || storedValue === undefined || storedValue === '') {
         return storedValue ?? null;
@@ -82,7 +82,7 @@ function decryptFromDatabase(storedValue) {
     );
     decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
 
-    // decipher.final() verifies the auth tag and throws if the ciphertext was modified.
+    // To verify the auth tag and throw if the ciphertext was modified.
     const plaintext = Buffer.concat([
         decipher.update(Buffer.from(ciphertextHex, 'hex')),
         decipher.final()
@@ -90,7 +90,7 @@ function decryptFromDatabase(storedValue) {
 
     return plaintext.toString('utf8');
 }
-
+// To encrypt existing plaintext content in the database without downtime, then run a migration that updates each value with encryptForDatabase(decryptFromDatabase(value)).
 module.exports = {
     ENCRYPTION_PREFIX,
     encryptForDatabase,

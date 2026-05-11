@@ -1,3 +1,7 @@
+/**
+ * To migrates post content into PostgreSQL with server-side database encryption.
+ * Existing encrypted rows and already-imported JSON posts are skipped so the script is repeatable.
+ */
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
@@ -7,11 +11,13 @@ const {
     isEncryptedValue
 } = require('../app/security/databaseEncryption');
 
+// To load DATABASE_URL and DATABASE_ENCRYPTION_KEY from the app environment.
 dotenv.config({ path: path.join(__dirname, '..', 'app', '.env') });
 
 const dbConnectionString = process.env.DATABASE_URL;
 const postsJsonPath = path.join(__dirname, '..', 'app', 'public', 'json', 'posts.json');
 
+// To stop before connecting if the database URL is missing.
 if (!dbConnectionString) {
     console.error('Missing DATABASE_URL in app/.env.');
     process.exitCode = 1;
@@ -25,6 +31,7 @@ const pool = new Pool({
     }
 });
 
+// To ensure the posts table exists before importing JSON data or encrypting rows.
 async function ensurePostsTable(client) {
     await client.query(`
         CREATE TABLE IF NOT EXISTS posts (
@@ -37,6 +44,7 @@ async function ensurePostsTable(client) {
     `);
 }
 
+// To load legacy JSON posts when the original seed file is still present.
 function loadJsonPosts() {
     if (!fs.existsSync(postsJsonPath)) {
         return [];
@@ -45,6 +53,7 @@ function loadJsonPosts() {
     return JSON.parse(fs.readFileSync(postsJsonPath, 'utf8'));
 }
 
+// To encrypt existing database rows and import any missing legacy JSON posts in one transaction.
 async function migratePosts() {
     const client = await pool.connect();
     let encryptedExistingCount = 0;
@@ -56,6 +65,7 @@ async function migratePosts() {
         await client.query('BEGIN');
         await ensurePostsTable(client);
 
+        // To lock existing rows while checking whether each post still needs encryption.
         const existingResult = await client.query('SELECT post_id, content FROM posts FOR UPDATE');
         const existingPostIds = new Set();
 
@@ -80,6 +90,7 @@ async function migratePosts() {
             encryptedExistingCount += 1;
         }
 
+        // To import only JSON posts whose IDs are not already present in PostgreSQL.
         for (const post of loadJsonPosts()) {
             const postId = Number.parseInt(String(post.postId), 10);
 
@@ -111,6 +122,7 @@ async function migratePosts() {
         await client.query('COMMIT');
         console.log(`Post encryption migration complete. Existing encrypted: ${encryptedExistingCount}. Already encrypted skipped: ${skippedEncryptedCount}. JSON imported: ${importedJsonCount}. JSON skipped: ${skippedJsonCount}.`);
     } catch (error) {
+        // To roll back partial changes so a failed migration can be fixed and rerun cleanly.
         await client.query('ROLLBACK');
         throw error;
     } finally {

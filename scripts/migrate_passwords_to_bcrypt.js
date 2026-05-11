@@ -1,3 +1,7 @@
+/**
+ * To migrates existing user passwords from plaintext values to bcrypt hashes.
+ * The script is safe to rerun because already-hashed rows are detected and skipped.
+ */
 const path = require('path');
 const dotenv = require('dotenv');
 const { Pool } = require('pg');
@@ -6,10 +10,12 @@ const {
     looksLikeBcryptHash
 } = require('../app/security/passwordHashing');
 
+// To load the same database connection settings used by the Express app.
 dotenv.config({ path: path.join(__dirname, '..', 'app', '.env') });
 
 const dbConnectionString = process.env.DATABASE_URL;
 
+// To fail early if the local environment has not been configured.
 if (!dbConnectionString) {
     console.error('Missing DATABASE_URL in app/.env.');
     process.exitCode = 1;
@@ -23,11 +29,13 @@ const pool = new Pool({
     }
 });
 
+// To walk every user row and replace only plaintext password values with bcrypt hashes.
 async function migratePasswords() {
     let migratedCount = 0;
     let skippedCount = 0;
 
     try {
+        // To use a stable order so migration output is predictable during demos.
         const userResult = await pool.query(
             'SELECT username, password FROM users ORDER BY username'
         );
@@ -36,7 +44,7 @@ async function migratePasswords() {
             const username = user.username;
             const currentPasswordValue = user.password;
 
-            // Already-migrated rows are left unchanged so the script is safe to rerun.
+            // To leave already-migrated rows unchanged so the script is safe to rerun.
             if (looksLikeBcryptHash(currentPasswordValue)) {
                 skippedCount += 1;
                 console.log(`Skipped already-hashed password for user: ${username}`);
@@ -59,6 +67,7 @@ async function migratePasswords() {
             console.log(`Migrated password for user: ${username}`);
         }
 
+        // To report counts without printing any password material.
         console.log(`Password migration complete. Migrated: ${migratedCount}. Skipped: ${skippedCount}.`);
     } finally {
         await pool.end();

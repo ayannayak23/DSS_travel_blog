@@ -1,11 +1,17 @@
+/**
+ * To ensure the users table supports email login, bcrypt passwords, and public display names.
+ * Existing rows are preserved and missing columns/indexes are added repeatably.
+ */
 const path = require('path');
 const dotenv = require('dotenv');
 const { Pool } = require('pg');
 
+// To load the database connection string from the same app environment file.
 dotenv.config({ path: path.join(__dirname, '..', 'app', '.env') });
 
 const dbConnectionString = process.env.DATABASE_URL;
 
+// To stop before connecting if local database configuration is missing.
 if (!dbConnectionString) {
     console.error('Missing DATABASE_URL in app/.env.');
     process.exitCode = 1;
@@ -21,6 +27,7 @@ const pool = new Pool({
 
 const DISPLAY_NAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
 
+// To keep the migration safe for partially-upgraded databases.
 async function tableExists(client, tableName) {
     const result = await client.query(
         `SELECT EXISTS (
@@ -43,6 +50,7 @@ async function getColumnNames(client, tableName) {
     return new Set(result.rows.map((row) => row.column_name));
 }
 
+// To create or upgrade the users table without dropping existing account data.
 async function ensureUsersTable() {
     const client = await pool.connect();
 
@@ -65,6 +73,7 @@ async function ensureUsersTable() {
 
         const columns = await getColumnNames(client, 'users');
 
+        // To add any missing columns while preserving existing rows and password values.
         if (!columns.has('username')) {
             await client.query('ALTER TABLE users ADD COLUMN username TEXT');
             console.log('Added missing users.username column.');
@@ -84,6 +93,7 @@ async function ensureUsersTable() {
 
         await backfillDisplayNames(client);
 
+        // To apply NOT NULL only when current data already satisfies the constraint.
         const nullUsernameCount = await client.query('SELECT COUNT(*) AS count FROM users WHERE username IS NULL');
         const nullPasswordCount = await client.query('SELECT COUNT(*) AS count FROM users WHERE password IS NULL');
         const nullDisplayNameCount = await client.query('SELECT COUNT(*) AS count FROM users WHERE display_name IS NULL');
@@ -106,6 +116,7 @@ async function ensureUsersTable() {
             console.log('users.display_name has null rows, so NOT NULL was not applied.');
         }
 
+        // To avoid creating a uniqueness constraint if legacy duplicate usernames still exist.
         const duplicateResult = await client.query(`
             SELECT COUNT(*) AS duplicate_groups
             FROM (
@@ -124,6 +135,7 @@ async function ensureUsersTable() {
             console.log('Skipped unique index because duplicate usernames already exist.');
         }
 
+        // To ensure the display_name column is unique case-insensitively.
         await client.query('CREATE UNIQUE INDEX IF NOT EXISTS users_display_name_unique_idx ON users (LOWER(display_name))');
         console.log('Ensured users.display_name is unique case-insensitively.');
 
@@ -138,6 +150,7 @@ async function ensureUsersTable() {
     }
 }
 
+// To derive a valid public display name from existing data when none is already valid.
 function deriveDisplayName(identifier, existingDisplayName) {
     const current = String(existingDisplayName || '').trim();
     if (DISPLAY_NAME_PATTERN.test(current)) {
@@ -155,6 +168,7 @@ function deriveDisplayName(identifier, existingDisplayName) {
     return `user_${safeBase || 'acct'}`.slice(0, 20);
 }
 
+// To add a numeric suffix when derived display names would otherwise collide.
 function makeUniqueDisplayName(baseName, usedNames) {
     let candidate = baseName.slice(0, 20);
     let suffix = 2;
@@ -169,6 +183,7 @@ function makeUniqueDisplayName(baseName, usedNames) {
     return candidate;
 }
 
+// To backfill missing or invalid display names before enforcing the display-name index.
 async function backfillDisplayNames(client) {
     const usersResult = await client.query(`
         SELECT username, display_name
