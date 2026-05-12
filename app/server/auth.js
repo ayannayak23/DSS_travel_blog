@@ -269,11 +269,11 @@ function createAuthModule({ pool, loginState }) {
 
             await clearExistingSessions(username);
 
-            // Generate a random session ID.
+            // Session Hijacking - Generate a random session ID.
             const sessionId = crypto.randomBytes(32).toString('hex');
 
             try {
-                // Store the new session server-side and send only the random session ID in the cookie.
+                // Session Hijacking - Store the new session server-side and send only the random session ID in the cookie.
                 await pool.query(
                     `INSERT INTO sessions (session_id, username, ip_address, user_agent, is_active)
                      VALUES ($1, $2, $3, $4, true)`,
