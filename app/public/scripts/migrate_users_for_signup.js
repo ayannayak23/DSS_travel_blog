@@ -7,7 +7,7 @@ const dotenv = require('dotenv');
 const { Pool } = require('pg');
 
 // To load the database connection string from the same app environment file.
-dotenv.config({ path: path.join(__dirname, '..', 'app', '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const dbConnectionString = process.env.DATABASE_URL;
 
