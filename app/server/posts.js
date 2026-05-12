@@ -1,7 +1,7 @@
 const multer = require('multer');
 const { decryptFromDatabase, encryptForDatabase } = require('../security/databaseEncryption');
 const { LIMITS, PATTERNS, PATHS, ALLOWED_IMAGE_MIME_TYPES } = require('./config');
-const { getSafeString, isWithinMaxLength, sendPage } = require('./utils');
+const { decodeBasicHtmlEntities, getSafeString, isWithinMaxLength, sanitizeHtmlText, sendPage } = require('./utils');
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -37,17 +37,13 @@ function parsePostId(postId) {
     return parsed;
 }
 
-function containsHtmlLikeInput(value) {
-    return PATTERNS.plainTextOnly.test(value);
-}
-
 function buildPostFromRow(row) {
     return {
         username: row.author_name || 'Unknown user',
         timestamp: row.created_at_display,
         postId: row.post_id,
-        title: row.title,
-        content: decryptFromDatabase(row.content)
+        title: decodeBasicHtmlEntities(row.title),
+        content: decodeBasicHtmlEntities(decryptFromDatabase(row.content))
     };
 }
 
@@ -173,6 +169,8 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
             const parsedPostId = parsePostId(submittedPostId);
             const title = getSafeString(req.body.title_field).trim();
             const content = getSafeString(req.body.content_field).trim();
+            const sanitizedTitle = sanitizeHtmlText(title);
+            const sanitizedContent = sanitizeHtmlText(content);
 
             if (
                 title === '' ||
@@ -182,10 +180,6 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
                 !isWithinMaxLength(content, LIMITS.maxPostContentLength)
             ) {
                 return res.status(400).send('Invalid post data.');
-            }
-
-            if (containsHtmlLikeInput(title) || containsHtmlLikeInput(content)) {
-                return res.status(400).send('Posts must use plain text only.');
             }
 
             const postId = parsedPostId ?? await getNextPostId(pool);
@@ -209,7 +203,7 @@ function registerPostRoutes(app, { pool, validateSession, validateCsrfToken }) {
                     created_at_display = EXCLUDED.created_at_display,
                     title = EXCLUDED.title,
                     content = EXCLUDED.content`,
-                [postId, req.currentUser, getCurrentDisplayTimestamp(), title, encryptForDatabase(content)]
+                [postId, req.currentUser, getCurrentDisplayTimestamp(), sanitizedTitle, encryptForDatabase(sanitizedContent)]
             );
 
             for (let index = 0; index < uploadedFiles.length; index += 1) {

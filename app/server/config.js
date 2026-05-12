@@ -34,8 +34,7 @@ const LIMITS = {
 const PATTERNS = {
     displayName: /^[A-Za-z0-9_]{3,20}$/,
     sessionId: /^[a-f0-9]{64}$/i,
-    numericOnly: /^[0-9]+$/,
-    plainTextOnly: /[<>]/
+    numericOnly: /^[0-9]+$/
 };
 
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);

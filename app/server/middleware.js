@@ -1,3 +1,4 @@
+// CSP and other security headers middleware for XSS prevention
 function createSecurityHeadersMiddleware() {
     return (req, res, next) => {
         res.setHeader(

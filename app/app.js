@@ -22,7 +22,7 @@ assertRequiredConfig();
 // 30 requests per 15 minutes for general use
 const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 30,
+    max: 100,
     message: { error: 'Too many requests please try again later' },
     skip: (req) => {
         const path = req.path || '';
@@ -89,9 +89,7 @@ function wafMiddleware(req, res, next) {
 const app = express();
 const pool = new Pool({
     connectionString: ENV.dbConnectionString,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    ssl: { rejectUnauthorized: false, sslmode: 'verify-full' }
 });
 
 const loginState = createLoginState();

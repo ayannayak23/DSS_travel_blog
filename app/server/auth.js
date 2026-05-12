@@ -248,6 +248,7 @@ function createAuthModule({ pool, loginState }) {
 
         try {
             // users.password stores a bcrypt hash, not the plaintext password.
+            //SQL Imjection is prevented by using parameterised queries.
             const userResult = await pool.query(
                 'SELECT username, password FROM users WHERE username = $1 LIMIT 1',
                 [username]
@@ -354,6 +355,7 @@ function createAuthModule({ pool, loginState }) {
     }
 
     // Start a provider-specific OAuth login unless the current request is already authenticated.
+    // express-openid-connect handles the callback route and session management automatically.
     function createOauthLoginHandler(connection) {
         return (req, res) => {
             if (isOidcAuthenticated(req)) {
