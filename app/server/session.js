@@ -8,17 +8,17 @@ function createSessionTools({ pool, getOidcUsername }) {
         return Boolean(req.oidc && typeof req.oidc.isAuthenticated === 'function' && req.oidc.isAuthenticated());
     }
 
-    // Validate the session ID format.
+    // Session Hijacking - Validate the session ID format.
     function isValidSessionId(sessionId) {
         return typeof sessionId === 'string' && PATTERNS.sessionId.test(sessionId);
     }
 
-    // Deactivate the session when the user logs out or the session becomes invalid.
+    // Session Hijacking - Deactivate the session when the user logs out or the session becomes invalid.
     async function deactivateSessionById(sessionId) {
         return pool.query('UPDATE sessions SET is_active = false WHERE session_id = $1', [sessionId]);
     }
 
-    // Handle session validation failures by clearing the cookie.
+    // Session Hijacking - Handle session validation failures by clearing the cookie.
     function handleSessionFailure(req, res) {
         res.clearCookie('session_id');
 
@@ -33,7 +33,7 @@ function createSessionTools({ pool, getOidcUsername }) {
         return res.redirect('/');
     }
 
-    // Middleware to validate the session on protected routes.
+    // Session Hijacking - Middleware to validate the session on protected routes.
     async function validateSession(req, res, next) {
         if (isOidcAuthenticated(req)) {
             req.currentUser = getOidcUsername(req.oidc.user);
@@ -75,7 +75,7 @@ function createSessionTools({ pool, getOidcUsername }) {
             const session = sessionResult.rows[0];
             const minutesElapsed = Number(session.minutes_elapsed);
 
-            // Check for session timeout.
+            // Check for session timeout to prevent session hijacking.
             if (!Number.isFinite(minutesElapsed) || minutesElapsed > LIMITS.sessionTimeoutMinutes) {
                 console.warn('Session timeout for user:', session.username);
                 await deactivateSessionById(sessionId);
@@ -98,7 +98,7 @@ function createSessionTools({ pool, getOidcUsername }) {
                 return handleSessionFailure(req, res);
             }
 
-            // Update last activity timestamp to extend session validity.
+            // Session Hijacking - Update last activity timestamp to extend session validity.
             await pool.query(
                 'UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE session_id = $1',
                 [sessionId]

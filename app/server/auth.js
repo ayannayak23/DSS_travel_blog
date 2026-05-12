@@ -203,7 +203,7 @@ function createAuthModule({ pool, loginState }) {
         return sendLoginPage(res);
     }
 
-    // Invalidate older sessions for the same local user before issuing a fresh session cookie.
+    // Invalidate older sessions for the same local user before issuing a fresh session cookie to prevent session hijacking.
     async function clearExistingSessions(username) {
         try {
             await pool.query(
