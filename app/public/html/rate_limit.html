@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>{{TITLE}}</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" type="image/png" href="/imgs/plane-icon.png">
+        <link rel="stylesheet" href="/css/style.css">
+        <style>
+            body {
+                margin: 0;
+                background: rgb(87, 157, 189);
+                color: #2b2b2b;
+            }
+
+            .rate-limit-wrap {
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 24px;
+            }
+
+            .rate-limit-card {
+                max-width: 520px;
+                width: 100%;
+                background: #ffffff;
+                border: 1px solid #e3d9c6;
+                border-radius: 16px;
+                padding: 32px;
+                box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+                text-align: center;
+            }
+
+            .rate-limit-card h1 {
+                margin: 0 0 12px;
+            }
+
+            .rate-limit-card p {
+                margin: 0 0 12px;
+                line-height: 1.5;
+            }
+
+            .rate-limit-button {
+                display: inline-block;
+                margin-top: 10px;
+                padding: 10px 20px;
+                background: #0b5d5a;
+                color: #ffffff;
+                text-decoration: none;
+                border-radius: 999px;
+            }
+        </style>
+    </head>
+    <body>
+        <main class="rate-limit-wrap">
+            <section class="rate-limit-card">
+                <h1>{{TITLE}}</h1>
+                <p>{{MESSAGE}}</p>
+                <p>Please wait a few minutes and try again.</p>
+                <a class="rate-limit-button" href="{{ACTION_HREF}}">{{ACTION_LABEL}}</a>
+            </section>
+        </main>
+    </body>
+</html>
