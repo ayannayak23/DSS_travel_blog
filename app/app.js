@@ -130,8 +130,7 @@ const imageLimiter = rateLimit({
     }
 });
 
-//limit just for the login page to stop brute force flooding
-//only 5 attempts per 5 seconds per IP (demo)
+// Rate limit for the login page to stop brute force flooding (only 5 attempts per 5 seconds per IP)
 const loginLimiter = rateLimit({
     windowMs: 5 * 1000,
     max: 5,
