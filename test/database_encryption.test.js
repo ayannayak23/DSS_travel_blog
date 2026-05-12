@@ -4,7 +4,7 @@
 const assert = require('assert');
 
 // Use a fixed test only key so encryption behaviour can be checked without reading real secrets.
-process.env.DATABASE_ENCRYPTION_KEY = 'd8dacde546e09c4c9963a97d99777c8c4ee81f94a28e854a0281d9608a96426a';
+const TEST_DATABASE_ENCRYPTION_KEY = 'd8dacde546e09c4c9963a97d99777c8c4ee81f94a28e854a0281d9608a96426a';
 
 const {
     encryptForDatabase,
@@ -19,21 +19,41 @@ function tamperWithLastCharacter(value) {
     return value.slice(0, -1) + replacement;
 }
 
-const plainText = 'This post body should be encrypted in PostgreSQL.';
-const firstEncrypted = encryptForDatabase(plainText);
-const secondEncrypted = encryptForDatabase(plainText);
+describe('database encryption', function () {
+    const plainText = 'This post body should be encrypted in PostgreSQL.';
+    const originalKey = process.env.DATABASE_ENCRYPTION_KEY;
 
-// To ensure encrypted database values do not expose plaintext and decrypt back to the original content.
-assert.notStrictEqual(firstEncrypted, plainText);
-assert.strictEqual(decryptFromDatabase(firstEncrypted), plainText);
+    beforeEach(function () {
+        process.env.DATABASE_ENCRYPTION_KEY = TEST_DATABASE_ENCRYPTION_KEY;
+    });
 
-// A fresh IV should produce different ciphertext for the same plaintext.
-assert.notStrictEqual(firstEncrypted, secondEncrypted);
-assert.strictEqual(isEncryptedValue(firstEncrypted), true);
-assert.strictEqual(isEncryptedValue(plainText), false);
+    after(function () {
+        if (typeof originalKey === 'string') {
+            process.env.DATABASE_ENCRYPTION_KEY = originalKey;
+        } else {
+            delete process.env.DATABASE_ENCRYPTION_KEY;
+        }
+    });
 
-// To ensure legacy plaintext remains readable, while modified encrypted values fail authentication.
-assert.strictEqual(decryptFromDatabase(plainText), plainText);
-assert.throws(() => decryptFromDatabase(tamperWithLastCharacter(firstEncrypted)));
+    it('encrypts and decrypts values with a fresh IV each time', function () {
+        const firstEncrypted = encryptForDatabase(plainText);
+        const secondEncrypted = encryptForDatabase(plainText);
 
-console.log('Database encryption tests passed.');
+        // To ensure encrypted database values do not expose plaintext and decrypt back to the original content.
+        assert.notStrictEqual(firstEncrypted, plainText);
+        assert.strictEqual(decryptFromDatabase(firstEncrypted), plainText);
+
+        // A fresh IV should produce different ciphertext for the same plaintext.
+        assert.notStrictEqual(firstEncrypted, secondEncrypted);
+        assert.strictEqual(isEncryptedValue(firstEncrypted), true);
+        assert.strictEqual(isEncryptedValue(plainText), false);
+    });
+
+    it('keeps legacy plaintext readable and rejects tampered ciphertext', function () {
+        const encrypted = encryptForDatabase(plainText);
+
+        // To ensure legacy plaintext remains readable, while modified encrypted values fail authentication.
+        assert.strictEqual(decryptFromDatabase(plainText), plainText);
+        assert.throws(() => decryptFromDatabase(tamperWithLastCharacter(encrypted)));
+    });
+});

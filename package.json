@@ -1,22 +1,32 @@
 {
   "scripts": {
+    "test": "mocha",
     "start": "node app/app.js",
     "migrate:passwords": "node app/public/scripts/migrate_passwords_to_bcrypt.js",
     "migrate:users": "node app/public/scripts/migrate_users_for_signup.js",
     "migrate:encrypt-posts": "node app/public/scripts/migrate_posts_to_encrypted.js",
-    "test:hashing": "node test/password_hashing.test.js",
-    "test:encryption": "node test/database_encryption.test.js",
-    "test:signup": "node test/signup_validation.test.js"
+    "test:hashing": "mocha test/password_hashing.test.js",
+    "test:encryption": "mocha test/database_encryption.test.js",
+    "test:signup": "mocha test/signup_validation.test.js",
+    "test:posts": "mocha test/posts_routes.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "body-parser": "^2.2.0",
+    "chai": "^6.2.2",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
     "express-openid-connect": "^2.20.2",
     "express-rate-limit": "^8.5.1",
     "multer": "^1.4.5-lts.1",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "prompt-sync": "^4.2.0"
+  },
+  "devDependencies": {
+    "mocha": "^11.3.0"
+  },
+    "overrides": {
+      "serialize-javascript": "^7.0.0"
   }
 }
