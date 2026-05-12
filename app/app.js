@@ -3,6 +3,8 @@ const cookieParser = require('cookie-parser');
 const { Pool } = require('pg');
 const { auth } = require('express-openid-connect');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const rateLimit = require('express-rate-limit');
 const {
     PORT,
@@ -18,12 +20,86 @@ const { registerPostRoutes, handleUploadError } = require('./server/posts');
 
 assertRequiredConfig();
 
-// Rate limiting limits how many requests an IP can make to stop flooding
-// 30 requests per 15 minutes for general use
+// Load the rate limit HTML template once at startup.
+const RATE_LIMIT_TEMPLATE_PATH = path.join(__dirname, 'public', 'html', 'rate_limit.html');
+let rateLimitTemplate = '';
+
+try {
+    rateLimitTemplate = fs.readFileSync(RATE_LIMIT_TEMPLATE_PATH, 'utf8');
+} catch (error) {
+    console.error('Failed to load rate limit template:', error.message);
+}
+
+// Convert special HTML characters to safe text to prevent them being interpreted as HTML.
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Build the rate limit response page with the provided title, message, and link.
+function buildRateLimitPage({ title, message, actionHref, actionLabel }) {
+    const template = rateLimitTemplate || '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rate limited</title></head><body><h1>{{TITLE}}</h1><p>{{MESSAGE}}</p><a href="{{ACTION_HREF}}">{{ACTION_LABEL}}</a></body></html>';
+
+    return template
+        .replace(/{{TITLE}}/g, escapeHtml(title))
+        .replace(/{{MESSAGE}}/g, escapeHtml(message))
+        .replace(/{{ACTION_HREF}}/g, escapeHtml(actionHref))
+        .replace(/{{ACTION_LABEL}}/g, escapeHtml(actionLabel));
+}
+
+// Extract the path from the request URL without query parameters.
+function getRequestPath(req) {
+    const originalUrl = req.originalUrl || req.url || '';
+    return originalUrl.split('?')[0];
+}
+
+// Check whether the request expects a JSON response based on headers or path.
+function shouldSendJson(req) {
+    const requestPath = getRequestPath(req);
+    const acceptHeader = req.headers.accept || '';
+    if (acceptHeader.includes('application/json')) {
+        return true;
+    }
+
+    return requestPath.endsWith('-data') || requestPath === '/ping';
+}
+
+// Send the correct rate limit response format depending on the request type.
+function sendRateLimitResponse(req, res, options, pageOptions) {
+    const statusCode = options?.statusCode || 429;
+    const retryAfterSeconds = Math.ceil((options?.windowMs || 60 * 1000) / 1000);
+    res.set('Retry-After', String(retryAfterSeconds));
+
+    const requestPath = getRequestPath(req);
+    if (requestPath.startsWith('/post-images/')) {
+        return res.status(statusCode).end();
+    }
+
+    if (shouldSendJson(req)) {
+        return res.status(statusCode).json({ error: pageOptions.message, retryAfterSeconds });
+    }
+
+    return res.status(statusCode).send(buildRateLimitPage(pageOptions));
+}
+
+// Apply a general rate limit to all routes to reduce request flooding.
+// 100 requests per 15 minutes for general use
 const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
     message: { error: 'Too many requests please try again later' },
+    handler: (req, res, next, options) => {
+        sendRateLimitResponse(req, res, options, {
+            title: 'Too Many Requests',
+            message: 'Too many requests from this device.',
+            actionHref: '/',
+            actionLabel: 'Go to login'
+        });
+    },
     skip: (req) => {
         const path = req.path || '';
 
@@ -43,15 +119,31 @@ const generalLimiter = rateLimit({
 const imageLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 600,
-    message: { error: 'Too many image requests please try again later' }
+    message: { error: 'Too many image requests please try again later' },
+    handler: (req, res, next, options) => {
+        sendRateLimitResponse(req, res, options, {
+            title: 'Too Many Image Requests',
+            message: 'Too many image requests from this device.',
+            actionHref: '/',
+            actionLabel: 'Go to login'
+        });
+    }
 });
 
 //limit just for the login page to stop brute force flooding
-//only 5 attempts per 15 minutes per IP
+//only 5 attempts per 5 seconds per IP (demo)
 const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 5 * 1000,
     max: 5,
-    message: { error: 'Too many login attempts please wait and try again' }
+    message: { error: 'Too many login attempts please wait and try again' },
+    handler: (req, res, next, options) => {
+        sendRateLimitResponse(req, res, options, {
+            title: 'Too Many Login Attempts',
+            message: 'Too many login attempts from this device.',
+            actionHref: '/',
+            actionLabel: 'Back to login'
+        });
+    }
 });
 
 // WAF middleware
