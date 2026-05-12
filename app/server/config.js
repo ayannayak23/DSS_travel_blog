@@ -38,6 +38,7 @@ const PATTERNS = {
     plainTextOnly: /[<>]/
 };
 
+// Allow only safe image MIME types to be uploaded to reduce the risk of malicious file uploads.
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const OAUTH_CONNECTIONS = {

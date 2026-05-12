@@ -1,19 +1,24 @@
 const { LIMITS, PATTERNS } = require('./config');
 const { getRequestIp, getUserAgent } = require('./utils');
 
+// Session management
 function createSessionTools({ pool, getOidcUsername }) {
+    // Check if the request is authenticated via OIDC (Auth0).
     function isOidcAuthenticated(req) {
         return Boolean(req.oidc && typeof req.oidc.isAuthenticated === 'function' && req.oidc.isAuthenticated());
     }
 
+    // Validate the session ID format.
     function isValidSessionId(sessionId) {
         return typeof sessionId === 'string' && PATTERNS.sessionId.test(sessionId);
     }
 
+    // Deactivate the session when the user logs out or the session becomes invalid.
     async function deactivateSessionById(sessionId) {
         return pool.query('UPDATE sessions SET is_active = false WHERE session_id = $1', [sessionId]);
     }
 
+    // Handle session validation failures by clearing the cookie.
     function handleSessionFailure(req, res) {
         res.clearCookie('session_id');
 
@@ -28,6 +33,7 @@ function createSessionTools({ pool, getOidcUsername }) {
         return res.redirect('/');
     }
 
+    // Middleware to validate the session on protected routes.
     async function validateSession(req, res, next) {
         if (isOidcAuthenticated(req)) {
             req.currentUser = getOidcUsername(req.oidc.user);
@@ -60,6 +66,7 @@ function createSessionTools({ pool, getOidcUsername }) {
                 [sessionId]
             );
 
+            // If no active session is found, treat it as invalid.
             if (sessionResult.rows.length === 0) {
                 console.warn('Session not found or inactive:', sessionId);
                 return handleSessionFailure(req, res);
@@ -68,12 +75,14 @@ function createSessionTools({ pool, getOidcUsername }) {
             const session = sessionResult.rows[0];
             const minutesElapsed = Number(session.minutes_elapsed);
 
+            // Check for session timeout.
             if (!Number.isFinite(minutesElapsed) || minutesElapsed > LIMITS.sessionTimeoutMinutes) {
                 console.warn('Session timeout for user:', session.username);
                 await deactivateSessionById(sessionId);
                 return handleSessionFailure(req, res);
             }
 
+            // Compare the stored IP address and user-agent with the current request to detect session hijacking.
             if (session.ip_address !== currentIp) {
                 console.warn('IP mismatch detected for session:', sessionId);
                 console.warn('Original IP:', session.ip_address, 'Current IP:', currentIp);
@@ -89,6 +98,7 @@ function createSessionTools({ pool, getOidcUsername }) {
                 return handleSessionFailure(req, res);
             }
 
+            // Update last activity timestamp to extend session validity.
             await pool.query(
                 'UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE session_id = $1',
                 [sessionId]
