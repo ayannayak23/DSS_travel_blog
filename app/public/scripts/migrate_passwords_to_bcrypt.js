@@ -8,10 +8,10 @@ const { Pool } = require('pg');
 const {
     hashPassword,
     looksLikeBcryptHash
-} = require('../app/security/passwordHashing');
+} = require('../../security/passwordHashing');
 
 // To load the same database connection settings used by the Express app.
-dotenv.config({ path: path.join(__dirname, '..', 'app', '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const dbConnectionString = process.env.DATABASE_URL;
 

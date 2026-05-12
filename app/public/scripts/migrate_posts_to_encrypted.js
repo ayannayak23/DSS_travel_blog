@@ -9,13 +9,13 @@ const { Pool } = require('pg');
 const {
     encryptForDatabase,
     isEncryptedValue
-} = require('../app/security/databaseEncryption');
+} = require('../../security/databaseEncryption');
 
 // To load DATABASE_URL and DATABASE_ENCRYPTION_KEY from the app environment.
-dotenv.config({ path: path.join(__dirname, '..', 'app', '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const dbConnectionString = process.env.DATABASE_URL;
-const postsJsonPath = path.join(__dirname, '..', 'app', 'public', 'json', 'posts.json');
+const postsJsonPath = path.join(__dirname, '..', 'json', 'posts.json');
 
 // To stop before connecting if the database URL is missing.
 if (!dbConnectionString) {
