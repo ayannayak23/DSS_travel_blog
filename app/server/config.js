@@ -20,7 +20,7 @@ const ENV = {
 };
 
 const LIMITS = {
-    sessionTimeoutMinutes: 4,
+    sessionTimeoutMinutes: 60,
     maxPasswordLength: 256,
     maxEmailLength: 254,
     maxRecaptchaTokenLength: 4096,
