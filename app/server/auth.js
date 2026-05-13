@@ -251,7 +251,7 @@ function createAuthModule({ pool, loginState }) {
 
         try {
             // users.password stores a bcrypt hash, not the plaintext password.
-            //SQL Imjection is prevented by using parameterised queries.
+            //SQL Injection is prevented by using parameterised queries.
             const userResult = await pool.query(
                 'SELECT username, password FROM users WHERE username = $1 LIMIT 1',
                 [username]
