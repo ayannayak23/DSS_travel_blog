@@ -37,6 +37,8 @@ PASSWORD_PEPPER=your_password_pepper
 DATABASE_ENCRYPTION_KEY=64_character_hex_key
 ```
 
+We are submitting the .env file with all the required environment variables included in the codebase, so there is no need to create a new one.
+
 ## Running the Application
 
 Start the server with:
